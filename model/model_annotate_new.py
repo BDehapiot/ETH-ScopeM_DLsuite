@@ -32,17 +32,23 @@ class Painter:
         self.idx = 0
         self.init_paths()
         self.init_viewer()
+        self.update()
+        
+    # -------------------------------------------------------------------------
+        
+    def update(self):
+        self.open_image()
         
     def init_paths(self):
-        self.paths = []
-        for path in self.train_path.iterdir():
-            if "mask" not in path.name:
-                self.paths.append(path)
+        self.img_paths = []
+        for img_path in self.train_path.iterdir():
+            if "mask" not in img_path.name:
+                self.img_paths.append(img_path)
         if randomize:
-            self.paths = np.random.permutation(self.paths).tolist()
+            self.img_paths = np.random.permutation(self.img_paths).tolist()
         
     def init_viewer(self):
-        
+               
         # Setup viewer
         self.viewer = napari.Viewer()
         self.viewer.text_overlay.visible = True
@@ -73,8 +79,8 @@ class Painter:
 
         # Connect buttons
         # btn_save_mask.clicked.connect(save_mask)
-        # btn_next_image.clicked.connect(next_image)
-        # btn_previous_image.clicked.connect(previous_image)
+        btn_next_image.clicked.connect(self.next_image)
+        btn_previous_image.clicked.connect(self.previous_image)
 
         # Add the widget to viewer
         self.viewer.window.add_dock_widget(
@@ -82,10 +88,22 @@ class Painter:
         # open_image()
         # napari.run()
         
+        # Shortcuts -----------------------------------------------------------
+        
+        @napari.Viewer.bind_key('PageUp', overwrite=True)
+        def next_image_key(viewer):
+            self.next_image()
+            
+        @napari.Viewer.bind_key('PageDown', overwrite=True)
+        def previous_image_key(viewer):
+            self.previous_image()
+        
+    # -------------------------------------------------------------------------
+        
     def open_image(self):
         
         self.viewer.layers.clear()
-        img_path = self.paths[self.idx]
+        img_path = self.img_paths[self.idx]
         msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
         
         if msk_path.exists() and edit:   
@@ -95,14 +113,29 @@ class Painter:
             img = io.imread(img_path)
             msk = np.zeros_like(img, dtype="uint8")
             
-        if "img" in locals():
-            viewer.add_image(img, name="image", metadata=metadata[idxs[idx]])
-            viewer.add_labels(msk, name="mask")
-            viewer.layers["image"].contrast_limits = contrast_limits
-            viewer.layers["image"].gamma = 0.66
-            viewer.layers["mask"].brush_size = brush_size
-            viewer.layers["mask"].selected_label = 1
-            viewer.layers["mask"].mode = 'paint'
+        self.viewer.add_image(img, name="image")
+        self.viewer.add_labels(msk, name="mask")
+        self.viewer.layers["image"].contrast_limits = contrast_limits
+        self.viewer.layers["image"].gamma = 0.66
+        self.viewer.layers["mask"].brush_size = brush_size
+        self.viewer.layers["mask"].selected_label = 1
+        self.viewer.layers["mask"].mode = 'paint'
+            
+    # def save_mask(self):
+    #     path = self.viewer.layers["image"].metadata["path"]
+    #     path = Path(str(path).replace(".tif", f"_mask-{mask_type}.tif"))
+    #     io.imsave(path, self.viewer.layers["mask"].data, check_contrast=False)  
+    #     info.setText(update_info_text())
+        
+    def next_image(self): 
+        self.idx += 1
+        self.update()
+        # info.setText(update_info_text())
+            
+    def previous_image(self):
+        self.idx -= 1
+        self.update()
+        # info.setText(update_info_text())
         
 #%% Execute -------------------------------------------------------------------
 
