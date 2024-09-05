@@ -1,12 +1,17 @@
 #%% Imports -------------------------------------------------------------------
 
+import time
 import napari
 import numpy as np
 from skimage import io
 from pathlib import Path
 
+# functions
+from model_functions import update_info_text
+
 # Qt
 from qtpy.QtGui import QFont
+from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel
 
 #%% Inputs --------------------------------------------------------------------
@@ -20,9 +25,19 @@ mask_type = "mask"
 randomize = True
 np.random.seed(42)
 contrast_limits = (0, 65535)
-brush_size = 60
+brush_size = 10
 
-#%% Function : open_image() ---------------------------------------------------
+#%% Settings (Napari) ---------------------------------------------------------
+
+from app_model.types import KeyBinding, KeyCode, KeyMod
+from napari.settings import get_settings
+from napari.utils.action_manager import action_manager
+
+settings = get_settings()
+settings.appearance.theme = 'dark'
+settings.appearance.font_size = 6
+settings.shortcuts.shortcuts["napari:reset_view"] = [KeyMod.CtrlCmd | KeyCode.KeyR | KeyCode.KeyE]
+settings.shortcuts.shortcuts["napari:focus_axes_up"] = [KeyMod.Alt | KeyCode.DownArrow]
 
 #%% Class : Painter() ---------------------------------------------------------
 
@@ -33,6 +48,12 @@ class Painter:
         self.init_paths()
         self.init_viewer()
         self.update()
+        
+        # Timers
+        self.next_brush_size_timer = QTimer()
+        self.next_brush_size_timer.timeout.connect(self.next_brush_size)
+        self.prev_brush_size_timer = QTimer()
+        self.prev_brush_size_timer.timeout.connect(self.prev_brush_size)
         
     # -------------------------------------------------------------------------
         
@@ -60,7 +81,7 @@ class Painter:
         # Create buttons
         btn_save_mask = QPushButton("Save Mask")
         btn_next_image = QPushButton("Next Image")
-        btn_previous_image = QPushButton("Previous Image")
+        btn_prev_image = QPushButton("Previous Image")
 
         # Create texts
         self.info = QLabel()
@@ -70,7 +91,7 @@ class Painter:
         # Add buttons and text to layout
         self.layout.addWidget(btn_save_mask)
         self.layout.addWidget(btn_next_image)
-        self.layout.addWidget(btn_previous_image)
+        self.layout.addWidget(btn_prev_image)
         self.layout.addSpacing(20)
         self.layout.addWidget(self.info)
 
@@ -80,7 +101,7 @@ class Painter:
         # Connect buttons
         # btn_save_mask.clicked.connect(save_mask)
         btn_next_image.clicked.connect(self.next_image)
-        btn_previous_image.clicked.connect(self.previous_image)
+        btn_prev_image.clicked.connect(self.prev_image)
 
         # Add the widget to viewer
         self.viewer.window.add_dock_widget(
@@ -89,15 +110,58 @@ class Painter:
         # napari.run()
         
         # Shortcuts -----------------------------------------------------------
-        
-        @napari.Viewer.bind_key('PageUp', overwrite=True)
-        def next_image_key(viewer):
-            self.next_image()
             
-        @napari.Viewer.bind_key('PageDown', overwrite=True)
-        def previous_image_key(viewer):
-            self.previous_image()
+        @self.viewer.bind_key("Space", overwrite=True)
+        def pan_switch0(viewer):
+            self.pan()
+            yield
+            self.paint()
+            
+        @self.viewer.bind_key('Up', overwrite=True)
+        def next_brush_size_key(viewer):
+            self.next_brush_size() 
+            time.sleep(100 / 1000) 
+            self.next_brush_size_timer.start(10) 
+            yield
+            self.next_brush_size_timer.stop()
+            
+        @self.viewer.bind_key('Down', overwrite=True)
+        def prev_brush_size_key(viewer):
+            self.prev_brush_size() 
+            time.sleep(100 / 1000) 
+            self.prev_brush_size_timer.start(10) 
+            yield
+            self.prev_brush_size_timer.stop()
+            
+        @self.viewer.bind_key('Right', overwrite=True)
+        def next_label_key(viewer):
+            self.next_label()
+            
+        @self.viewer.bind_key('Left', overwrite=True)
+        def prev_label_key(viewer):
+            self.prev_label()
+            
+        @self.viewer.mouse_drag_callbacks.append
+        def erase(viewer, event):
+            if event.button==2:
+                self.erase()
+                yield
+                self.paint()
         
+        # @self.viewer.mouse_wheel_callbacks.append 
+        # def wheel(viewer, event):
+        #     if "Control" in event.modifiers:
+        #         print(event.delta)
+        #         if event.delta[1] == 1:
+        #             self.next_label()
+        #         if event.delta[1] == -1:
+        #             self.prev_label()   
+        #     if "Shift" in event.modifiers:
+        #         if event.delta[1] == 1:
+        #             self.increase_brush_size()
+        #         if event.delta[1] == -1:
+        #             self.decrease_brush_size()   
+                
     # -------------------------------------------------------------------------
         
     def open_image(self):
@@ -132,10 +196,33 @@ class Painter:
         self.update()
         # info.setText(update_info_text())
             
-    def previous_image(self):
+    def prev_image(self):
         self.idx -= 1
         self.update()
         # info.setText(update_info_text())
+        
+    def next_label(self):
+        self.viewer.layers["mask"].selected_label += 1 
+
+    def prev_label(self):
+        if self.viewer.layers["mask"].selected_label > 1:
+            self.viewer.layers["mask"].selected_label -= 1 
+            
+    def next_brush_size(self):
+        self.viewer.layers["mask"].brush_size += 1
+        
+    def prev_brush_size(self):
+        self.viewer.layers["mask"].brush_size -= 1
+        
+    def paint(self):
+        self.viewer.layers["mask"].mode = 'paint'
+            
+    def erase(self):
+        self.viewer.layers["mask"].mode = 'erase'
+        
+    def pan(self):
+        self.viewer.layers["mask"].mode = 'pan_zoom'
+        
         
 #%% Execute -------------------------------------------------------------------
 

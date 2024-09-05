@@ -1,4 +1,8 @@
-#%% Function (update_info_text) -----------------------------------------------
+#%% Imports -------------------------------------------------------------------
+
+from pathlib import Path
+
+#%% Function : update_info_text() ---------------------------------------------
 
 def update_info_text(img_path):
     
@@ -9,7 +13,6 @@ def update_info_text(img_path):
         else:
             return name
     
-    img_path = metadata[idxs[idx]]["path"]
     msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
     img_name = img_path.name    
     if msk_path.exists() and edit:
