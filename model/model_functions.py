@@ -4,7 +4,7 @@ from pathlib import Path
 
 #%% Function : update_info_text() ---------------------------------------------
 
-def update_info_text(img_path):
+def update_info_text(img_path, mask_type):
     
     def shorten_filename(name, max_length=32):
         if len(name) > max_length:
