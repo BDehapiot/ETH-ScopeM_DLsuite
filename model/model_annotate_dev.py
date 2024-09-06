@@ -9,23 +9,29 @@ from pathlib import Path
 # Qt
 from qtpy.QtGui import QFont
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel
+from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel, QFrame
 
 # Skimage
 from skimage.measure import label, regionprops
+from skimage.segmentation import find_boundaries, expand_labels
 
 #%% Comments ------------------------------------------------------------------
 
 '''
-- To reduce loading time preload images in a list? Could be an optionnal
-- Get statistics, updated live or when saving mask?
+- Adjust statistic display (color, alignement...)
+- Better manage mask_type variable (maybe available from interface?)
+- Hide labels shortcut
+- B&C, auto? in the interface?
+- Fill objects (auto? shortcut? both?)
+- reset view shortcut
+- better tune brush resize method
 
 '''
 
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, 'data', 'train_spores') 
+train_path = Path(Path.cwd().parent, "data", "train_nuclei") 
 
 # Parameters
 edit = True
@@ -40,6 +46,8 @@ brush_size = 10
 class Painter:
     def __init__(self, train_path, edit=True, randomize=True):
         self.train_path = train_path
+        self.edit = edit
+        self.randomize = randomize
         self.idx = 0
         self.init_paths()
         self.init_images()
@@ -59,52 +67,80 @@ class Painter:
 #%% Initialize ----------------------------------------------------------------
         
     def init_paths(self):
-        self.img_paths = []
+        self.img_paths, self.msk_paths = [], []
         for img_path in self.train_path.iterdir():
             if "mask" not in img_path.name:
                 self.img_paths.append(img_path)
-        if randomize:
-            self.img_paths = np.random.permutation(self.img_paths).tolist()
+                self.msk_paths.append(
+                    Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
+                    )
+        if self.randomize:
+            permutation = np.random.permutation(len(self.img_paths))
+            self.img_paths = [self.img_paths[i] for i in permutation]
+            self.msk_paths = [self.msk_paths[i] for i in permutation]
             
     def init_images(self):
-        self.imgs = []
-        for img_path in self.img_paths:
-            self.imgs.append(io.imread(img_path))
+        self.imgs, self.msks = [], []
+        for img_path, msk_path in zip(self.img_paths, self.msk_paths):
+            img = io.imread(img_path)
+            if msk_path.exists() and self.edit:   
+                msk = io.imread(msk_path)
+            elif not msk_path.exists():
+                msk = np.zeros_like(img, dtype="uint8")
+            self.imgs.append(img)
+            self.msks.append(msk)
         
     def init_viewer(self):
                
         # Setup viewer
         self.viewer = napari.Viewer()
-        self.viewer.text_overlay.visible = True
-        self.viewer.text_overlay.text = ""
+        self.viewer.add_image(self.imgs[0], name="image")
+        self.viewer.add_labels(self.msks[0], name="mask")
+        # self.viewer.text_overlay.visible = True
+        # self.viewer.text_overlay.text = ""
 
         # Create widget
         self.widget = QWidget()
         self.layout = QVBoxLayout()
 
         # Create buttons
-        btn_save_mask = QPushButton("Save Mask")
         btn_next_image = QPushButton("Next Image")
         btn_prev_image = QPushButton("Previous Image")
+        btn_save_mask = QPushButton("Save Mask")
+        btn_solve_labels = QPushButton("Solve Labels")
 
         # Create texts
-        self.info = QLabel()
-        self.info.setFont(QFont("Consolas", 6))
+        self.info0  = QLabel()
+        self.info0.setFont(QFont("Consolas"))
+        self.info1  = QLabel()
+        self.info1.setFont(QFont("Consolas"))
+        self.info2  = QLabel()
+        self.info2.setFont(QFont("Consolas"))
         
         # Add buttons and text to layout
-        self.layout.addWidget(btn_save_mask)
+        
         self.layout.addWidget(btn_next_image)
         self.layout.addWidget(btn_prev_image)
-        self.layout.addSpacing(20)
-        self.layout.addWidget(self.info)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.info0)
+        self.layout.addSpacing(10)
+        
+        self.layout.addWidget(btn_solve_labels)
+        self.layout.addWidget(btn_save_mask)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.info1)
+        self.layout.addSpacing(10)
+        
+        self.layout.addWidget(self.info2)
 
         # Add layout to widget
         self.widget.setLayout(self.layout)
 
         # Connect buttons
-        btn_save_mask.clicked.connect(self.save_mask)
         btn_next_image.clicked.connect(self.next_image)
         btn_prev_image.clicked.connect(self.prev_image)
+        btn_save_mask.clicked.connect(self.save_mask)
+        btn_solve_labels.clicked.connect(self.solve_labels)
 
         # Add the widget to viewer
         self.viewer.window.add_dock_widget(
@@ -204,19 +240,8 @@ class Painter:
         
     def open_image(self):
         
-        self.viewer.layers.clear()
-        img_path = self.img_paths[self.idx]
-        msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
-        
-        if msk_path.exists() and edit:   
-            img = io.imread(img_path)
-            msk = io.imread(msk_path)
-        elif not msk_path.exists():
-            img = io.imread(img_path)
-            msk = np.zeros_like(img, dtype="uint8")
-            
-        self.viewer.add_image(img, name="image")
-        self.viewer.add_labels(msk, name="mask")
+        self.viewer.layers["image"].data = self.imgs[self.idx]
+        self.viewer.layers["mask"].data = self.msks[self.idx]
         self.viewer.layers["image"].contrast_limits = contrast_limits
         self.viewer.layers["image"].gamma = 0.66
         self.viewer.layers["mask"].brush_size = brush_size
@@ -224,43 +249,55 @@ class Painter:
         self.viewer.layers["mask"].mode = 'paint'
 
 #%% Function(s) get_stats() ---------------------------------------------------
-
+       
     def get_stats(self):
-        msk = self.viewer.layers["mask"].data
-        msk_bin = label(msk > 0)
-        uniq = np.unique(msk)
-        uniq_bin = np.unique(msk_bin)
         
-        self.nObjects = np.maximum(0, len(uniq_bin) - 1)
-        self.nLabels = np.maximum(0, len(uniq) - 1)
+        msk = self.viewer.layers["mask"].data
+        msk_obj = label(msk > 0 ^ find_boundaries(msk), connectivity=1)
+        self.nObjects = np.maximum(0, len(np.unique(msk_obj)) - 1)
+        self.nLabels = np.maximum(0, len(np.unique(msk)) - 1)
         self.minLabel = np.min(msk)
         self.maxLabel = np.max(msk)
-        
+
         # Get missing labels (between min & max label)
         self.missLabels = []
         for lbl in range(self.maxLabel):
             if np.all(msk != lbl):
-                self.missLabels.append(lbl)
-        
-        # # Get duplicated labels (objects with same label)
-        # self.dupLabels = []
-        # for i, lbl in enumerate(unique):
-        #     if counts[i] > 1:
-        #        self.dupLabels.append(lbl) 
-                
-           
-        lbls = [props.intensity_max for props in regionprops(msk_bin, intensity_image=msk)]
-        print(lbls)
-            
+                self.missLabels.append(f"{lbl}")
+        self.missLabels = ", ".join(self.missLabels) 
 
+        # Get duplicated labels (multi objects label)
+        lbls = []
+        for props in regionprops(msk_obj, intensity_image=msk):
+            lbls.append(int(props.intensity_max))
+        uniq, count = np.unique(lbls, return_counts=True)
+        self.dupLabels = []
+        for l, lbl in enumerate(uniq):
+            if count[l] > 1:
+                self.dupLabels.append(f"{lbl}({count[l]})")
+        self.dupLabels = ", ".join(self.dupLabels)
+        
+#%% Function(s) solve_labels() ------------------------------------------------
+
+    def solve_labels(self):
+        msk = self.viewer.layers["mask"].data
+        msk_obj = msk.copy()
+        msk_obj[find_boundaries(msk) == 1] = 0
+        msk_obj = label(msk_obj, connectivity=1)
+        msk_obj = expand_labels(msk_obj)
+        msk_obj[msk == 0] = 0
+        self.viewer.layers["mask"].data = msk_obj
+        self.get_info_text()
+            
 #%% Function(s) save_mask() ---------------------------------------------------
        
     def save_mask(self):
-        img_path = self.img_paths[self.idx]
-        msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
-        io.imsave(msk_path, self.viewer.layers["mask"].data, check_contrast=False)  
+        msk = self.viewer.layers["mask"].data
+        msk_path = self.msk_paths[self.idx]
+        self.msks[self.idx] = msk
+        io.imsave(msk_path, msk, check_contrast=False) 
         self.get_info_text()
-       
+
 #%% Function(s) get_info_text() -----------------------------------------------
         
     def get_info_text(self):
@@ -273,8 +310,7 @@ class Painter:
                 return name
         
         img_path = self.img_paths[self.idx]
-        msk_path = Path(
-            str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
+        msk_path = self.msk_paths[self.idx]
         img_name = img_path.name    
         if msk_path.exists() and edit:
             msk_name = msk_path.name 
@@ -313,7 +349,7 @@ class Painter:
         # statistic values
         style3 = (
             " style='"
-            "color: Tan;"
+            "color: Brown;"
             "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"
@@ -329,7 +365,7 @@ class Painter:
             "'"
             )
 
-        self.info.setText(
+        self.info0.setText(
             
             # Image
             f"<p{style0}>Image<br><br>"
@@ -338,6 +374,10 @@ class Painter:
             # Mask
             f"<p{style0}>Mask<br><br>"
             f"<span{style1}>{shorten_filename(msk_name, max_length=32)}</span>"
+            
+            )
+            
+        self.info1.setText(
             
             # Statistics
             f"<p{style0}>Statistics<br><br>"
@@ -349,11 +389,15 @@ class Painter:
             f"<span{style3}> {self.minLabel}</span><br>"
             f"<span{style2}>- maxLabel       {'&nbsp;' * 6}:</span>"
             f"<span{style3}> {self.maxLabel}</span><br>"
-            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span><br>"
+            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span>"
             f"<span{style3}> {self.missLabels}</span><br>"       
-            f"<span{style2}>- dupLabel(s)   {'&nbsp;' * 2}:</span><br>"
-            f"<span{style3}> {self.missLabels}</span><br>" 
+            f"<span{style2}>- dupLabel(s)    {'&nbsp;' * 3}:</span>"
+            f"<span{style3}> {self.dupLabels}</span>" 
             
+            )
+        
+        self.info2.setText(
+        
             # Shortcuts
             f"<p{style0}>Shortcuts<br><br>"
             f"<span{style2}>- Save Mask      {'&nbsp;' * 5}:</span>"
