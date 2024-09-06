@@ -11,6 +11,9 @@ from qtpy.QtGui import QFont
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel
 
+# Skimage
+from skimage.measure import label, regionprops
+
 #%% Comments ------------------------------------------------------------------
 
 '''
@@ -50,8 +53,8 @@ class Painter:
         self.prev_brush_size_timer.timeout.connect(self.prev_brush_size)
 
     def update(self):
-        self.get_info_text()
         self.open_image()
+        self.get_info_text()
         
 #%% Initialize ----------------------------------------------------------------
         
@@ -220,6 +223,36 @@ class Painter:
         self.viewer.layers["mask"].selected_label = 1
         self.viewer.layers["mask"].mode = 'paint'
 
+#%% Function(s) get_stats() ---------------------------------------------------
+
+    def get_stats(self):
+        msk = self.viewer.layers["mask"].data
+        msk_bin = label(msk > 0)
+        uniq = np.unique(msk)
+        uniq_bin = np.unique(msk_bin)
+        
+        self.nObjects = np.maximum(0, len(uniq_bin) - 1)
+        self.nLabels = np.maximum(0, len(uniq) - 1)
+        self.minLabel = np.min(msk)
+        self.maxLabel = np.max(msk)
+        
+        # Get missing labels (between min & max label)
+        self.missLabels = []
+        for lbl in range(self.maxLabel):
+            if np.all(msk != lbl):
+                self.missLabels.append(lbl)
+        
+        # # Get duplicated labels (objects with same label)
+        # self.dupLabels = []
+        # for i, lbl in enumerate(unique):
+        #     if counts[i] > 1:
+        #        self.dupLabels.append(lbl) 
+                
+           
+        lbls = [props.intensity_max for props in regionprops(msk_bin, intensity_image=msk)]
+        print(lbls)
+            
+
 #%% Function(s) save_mask() ---------------------------------------------------
        
     def save_mask(self):
@@ -247,6 +280,8 @@ class Painter:
             msk_name = msk_path.name 
         elif not msk_path.exists():
             msk_name = "None"
+            
+        self.get_stats()
 
         # titles
         style0 = (
@@ -307,15 +342,17 @@ class Painter:
             # Statistics
             f"<p{style0}>Statistics<br><br>"
             f"<span{style2}>- nObject(s)     {'&nbsp;' * 4}:</span>"
-            f"<span{style3}> 0</span><br>"
+            f"<span{style3}> {self.nObjects}</span><br>"
             f"<span{style2}>- nLabel(s)      {'&nbsp;' * 5}:</span>"
-            f"<span{style3}> 0</span><br>"
+            f"<span{style3}> {self.nLabels}</span><br>"
             f"<span{style2}>- minLabel       {'&nbsp;' * 6}:</span>"
-            f"<span{style3}> 0</span><br>"
+            f"<span{style3}> {self.minLabel}</span><br>"
             f"<span{style2}>- maxLabel       {'&nbsp;' * 6}:</span>"
-            f"<span{style3}> 0</span><br>"
-            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span>"
-            f"<span{style3}> 0</span><br>"            
+            f"<span{style3}> {self.maxLabel}</span><br>"
+            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span><br>"
+            f"<span{style3}> {self.missLabels}</span><br>"       
+            f"<span{style2}>- dupLabel(s)   {'&nbsp;' * 2}:</span><br>"
+            f"<span{style3}> {self.missLabels}</span><br>" 
             
             # Shortcuts
             f"<p{style0}>Shortcuts<br><br>"
