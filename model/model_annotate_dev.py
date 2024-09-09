@@ -20,18 +20,16 @@ from skimage.segmentation import find_boundaries, expand_labels
 '''
 - Adjust statistic display (color, alignement...)
 - Better manage mask_type variable (maybe available from interface?)
-- Hide labels shortcut
 - B&C, auto? in the interface?
-- Fill objects (auto? shortcut? both?)
-- reset view shortcut
+- Fill objects (auto? shortcut? both?) Ongoing (Ctrl + right click to erase full label)
 - better tune brush resize method
-
+- Reset view on first image?
 '''
 
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, "data", "train_nuclei") 
+train_path = Path(Path.cwd().parent, "data", "train_spores") 
 
 # Parameters
 edit = True
@@ -96,8 +94,6 @@ class Painter:
         self.viewer = napari.Viewer()
         self.viewer.add_image(self.imgs[0], name="image")
         self.viewer.add_labels(self.msks[0], name="mask")
-        # self.viewer.text_overlay.visible = True
-        # self.viewer.text_overlay.text = ""
 
         # Create widget
         self.widget = QWidget()
@@ -145,32 +141,54 @@ class Painter:
         # Add the widget to viewer
         self.viewer.window.add_dock_widget(
             self.widget, area='right', name="Painter")
-        
+                
 #%% Shortcuts -----------------------------------------------------------------
         
+        # Viewer
+
         @self.viewer.bind_key("End", overwrite=True)
         def save_mask_key(viewer):
             self.save_mask() 
-            
-        @self.viewer.bind_key('Down', overwrite=True)
-        def prev_label_key(viewer):
-            self.prev_label()
-            
+        
+        @self.viewer.bind_key('PageDown', overwrite=True)
+        def previous_image_key(viewer):
+            self.prev_image()
+        
         @self.viewer.bind_key('PageUp', overwrite=True)
         def next_image_key(viewer):
             self.next_image()
-
+            
         @self.viewer.bind_key("0", overwrite=True)
-        def pan_switch0(viewer):
+        def pan_switch_key0(viewer):
             self.pan()
             yield
             self.paint()
             
         @self.viewer.bind_key("Space", overwrite=True)
-        def pan_switch1(viewer):
+        def pan_switch_key1(viewer):
             self.pan()
             yield
             self.paint()
+            
+        @self.viewer.bind_key('Backspace', overwrite=True)
+        def hide_labels_key(viewer):
+            self.hide_labels()
+            yield
+            self.show_labels()
+            
+        @self.viewer.bind_key('Home', overwrite=True)
+        def reset_view_key(viewer):
+            self.reset_view()
+            
+        # Paint
+            
+        @self.viewer.bind_key('Down', overwrite=True)
+        def prev_label_key(viewer):
+            self.prev_label()
+            
+        @self.viewer.bind_key('Up', overwrite=True)
+        def next_label_key(viewer):
+            self.next_label()
             
         @self.viewer.bind_key('Right', overwrite=True)
         def next_brush_size_key(viewer):
@@ -188,58 +206,82 @@ class Painter:
             yield
             self.prev_brush_size_timer.stop()
             
-        @self.viewer.bind_key('Up', overwrite=True)
-        def next_label_key(viewer):
-            self.next_label()
-
-        @self.viewer.bind_key('PageDown', overwrite=True)
-        def previous_image_key(viewer):
-            self.prev_image()
-            
         @self.viewer.mouse_drag_callbacks.append
         def erase(viewer, event):
-            if event.button==2:
+            
+            if event.button == 2:
                 self.erase()
                 yield
                 self.paint()
-                
-#%% Function(s) general -------------------------------------------------------
-                
-    def next_image(self): 
-        self.idx += 1
-        self.update()
             
+            if 'Control' in event.modifiers:
+                if event.button == 1:
+                    self.fill()
+                    yield
+                    self.paint()
+                    
+            if 'Control' in event.modifiers:
+                if event.button == 2:
+                    self.fill()
+                    yield
+                    self.paint()
+                
+#%% Function(s) shortcuts -----------------------------------------------------
+                
+    # Viewer    
+
     def prev_image(self):
         self.idx -= 1
         self.update()
         
-    def next_label(self):
-        self.viewer.layers["mask"].selected_label += 1 
+    def next_image(self): 
+        self.idx += 1
+        self.update()
+        
+    def pan(self):
+        self.viewer.layers["mask"].mode = 'pan_zoom'
+        
+    def show_labels(self):
+        self.viewer.layers["mask"].visible = True
+    
+    def hide_labels(self):
+        self.viewer.layers["mask"].visible = False  
+        
+    def reset_view(self):
+        self.viewer.reset_view()
 
+    # Paint
+    
     def prev_label(self):
         if self.viewer.layers["mask"].selected_label > 1:
             self.viewer.layers["mask"].selected_label -= 1 
             
-    def next_brush_size(self):
-        self.viewer.layers["mask"].brush_size += 1
+    def next_label(self):
+        self.viewer.layers["mask"].selected_label += 1 
         
     def prev_brush_size(self):
         if self.viewer.layers["mask"].brush_size > 1:
             self.viewer.layers["mask"].brush_size -= 1
         
+    def next_brush_size(self):
+        self.viewer.layers["mask"].brush_size += 1
+
     def paint(self):
         self.viewer.layers["mask"].mode = 'paint'
             
     def erase(self):
         self.viewer.layers["mask"].mode = 'erase'
         
-    def pan(self):
-        self.viewer.layers["mask"].mode = 'pan_zoom'
+    def fill(self):
+        self.viewer.layers["mask"].mode = "fill"
+
+    # def erase_label(self):
         
+        
+
 #%% Function(s) open_image() --------------------------------------------------
         
     def open_image(self):
-        
         self.viewer.layers["image"].data = self.imgs[self.idx]
         self.viewer.layers["mask"].data = self.msks[self.idx]
         self.viewer.layers["image"].contrast_limits = contrast_limits
@@ -247,6 +289,7 @@ class Painter:
         self.viewer.layers["mask"].brush_size = brush_size
         self.viewer.layers["mask"].selected_label = 1
         self.viewer.layers["mask"].mode = 'paint'
+        self.reset_view()
 
 #%% Function(s) get_stats() ---------------------------------------------------
        
@@ -323,7 +366,7 @@ class Painter:
         style0 = (
             " style='"
             "color: White;"
-            "font-size: 10px;"
+            "font-size: 12px;"
             "font-weight: normal;"
             "text-decoration: underline;"
             "'"
@@ -332,7 +375,7 @@ class Painter:
         style1 = (
             " style='"
             "color: Khaki;"
-            "font-size: 10px;"
+            "font-size: 12px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
@@ -341,7 +384,7 @@ class Painter:
         style2 = (
             " style='"
             "color: LightGray;"
-            "font-size: 10px;"
+            "font-size: 12px;"
             "font-weight: normal;"
             "text-decoration: none;"        
             "'"
@@ -350,7 +393,7 @@ class Painter:
         style3 = (
             " style='"
             "color: Brown;"
-            "font-size: 10px;"
+            "font-size: 12px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
@@ -359,7 +402,7 @@ class Painter:
         style4 = (
             " style='"
             "color: LightSteelBlue;"
-            "font-size: 10px;"
+            "font-size: 12px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
@@ -410,14 +453,16 @@ class Painter:
             f"<span{style4}> ArrowUp</span><br>"
             f"<span{style2}>- Previous Label {'&nbsp;' * 0}:</span>"
             f"<span{style4}> ArrowDown</span><br>"
+            f"<span{style2}>- Hide Labels    {'&nbsp;' * 3}:</span>"
+            f"<span{style4}> Backspace</span><br>"
             f"<span{style2}>- Increase brush {'&nbsp;' * 0}:</span>"
             f"<span{style4}> ArrowRight</span><br>"
             f"<span{style2}>- Decrease brush {'&nbsp;' * 0}:</span>"
             f"<span{style4}> ArrowLeft</span><br>"
             f"<span{style2}>- Paint tool     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> LeftClick</span><br>"
+            f"<span{style4}> Mouse[left]</span><br>"
             f"<span{style2}>- Erase tool     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> RightClick</span><br>"
+            f"<span{style4}> Mouse[right]</span><br>"
             f"<span{style2}>- Pan Image      {'&nbsp;' * 5}:</span>"
             f"<span{style4}> num[0]</span><br>"
             
