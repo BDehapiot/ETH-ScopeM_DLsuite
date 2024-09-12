@@ -13,11 +13,12 @@ from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel, QFrame
 
 # Skimage
 from skimage.measure import label, regionprops
-from skimage.segmentation import find_boundaries, expand_labels
+from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 
 #%% Comments ------------------------------------------------------------------
 
 '''
+- Refactoring with brush size, auto label etc...
 - Adjust statistic display (color, alignement...)
 - Better manage mask_type variable (maybe available from interface?)
 - B&C, auto? in the interface?
@@ -51,6 +52,9 @@ class Painter:
         self.init_images()
         self.init_viewer()
         self.update()
+        
+        # Options
+        
         
         # Timers
         self.next_brush_size_timer = QTimer()
@@ -207,22 +211,21 @@ class Painter:
             self.prev_brush_size_timer.stop()
             
         @self.viewer.mouse_drag_callbacks.append
-        def erase(viewer, event):
-            
-            if event.button == 2:
-                self.erase()
-                yield
-                self.paint()
-            
+        def mouse_actions(viewer, event):
             if 'Control' in event.modifiers:
                 if event.button == 1:
                     self.fill()
                     yield
                     self.paint()
-                    
-            if 'Control' in event.modifiers:
+                elif event.button == 2:
+                    position = event.position
+                    self.erase()
+                    self.erase_label(position)
+                    yield
+                    self.paint()
+            else:
                 if event.button == 2:
-                    self.fill()
+                    self.erase()
                     yield
                     self.paint()
                 
@@ -268,17 +271,18 @@ class Painter:
 
     def paint(self):
         self.viewer.layers["mask"].mode = 'paint'
-            
-    def erase(self):
-        self.viewer.layers["mask"].mode = 'erase'
         
     def fill(self):
         self.viewer.layers["mask"].mode = "fill"
+            
+    def erase(self):
+        self.viewer.layers["mask"].mode = 'erase'
 
-    # def erase_label(self):
+    def erase_label(self, position):
+        position = tuple((int(position[0]), int(position[1])))
+        self.viewer.layers["mask"].data = flood_fill(
+            self.viewer.layers["mask"].data, position, 0)
         
-        
-
 #%% Function(s) open_image() --------------------------------------------------
         
     def open_image(self):
@@ -287,7 +291,8 @@ class Painter:
         self.viewer.layers["image"].contrast_limits = contrast_limits
         self.viewer.layers["image"].gamma = 0.66
         self.viewer.layers["mask"].brush_size = brush_size
-        self.viewer.layers["mask"].selected_label = 1
+        self.viewer.layers["mask"].selected_label = np.max(
+            self.viewer.layers["mask"].data + 1)
         self.viewer.layers["mask"].mode = 'paint'
         self.reset_view()
 
@@ -330,6 +335,8 @@ class Painter:
         msk_obj = expand_labels(msk_obj)
         msk_obj[msk == 0] = 0
         self.viewer.layers["mask"].data = msk_obj
+        self.viewer.layers["mask"].selected_label = np.max(
+            self.viewer.layers["mask"].data + 1)
         self.get_info_text()
             
 #%% Function(s) save_mask() ---------------------------------------------------
@@ -366,7 +373,7 @@ class Painter:
         style0 = (
             " style='"
             "color: White;"
-            "font-size: 12px;"
+            "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: underline;"
             "'"
@@ -375,7 +382,7 @@ class Painter:
         style1 = (
             " style='"
             "color: Khaki;"
-            "font-size: 12px;"
+            "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
@@ -384,7 +391,7 @@ class Painter:
         style2 = (
             " style='"
             "color: LightGray;"
-            "font-size: 12px;"
+            "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"        
             "'"
@@ -393,7 +400,7 @@ class Painter:
         style3 = (
             " style='"
             "color: Brown;"
-            "font-size: 12px;"
+            "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
@@ -402,7 +409,7 @@ class Painter:
         style4 = (
             " style='"
             "color: LightSteelBlue;"
-            "font-size: 12px;"
+            "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"
             "'"
