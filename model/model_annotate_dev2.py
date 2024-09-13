@@ -9,7 +9,10 @@ from pathlib import Path
 # Qt
 from qtpy.QtGui import QFont
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel, QFrame
+from qtpy.QtWidgets import (
+    QPushButton, QRadioButton, QButtonGroup, QGroupBox,
+    QVBoxLayout, QWidget, QLabel, QFrame
+    )
 
 # Skimage
 from skimage.measure import label, regionprops
@@ -102,15 +105,31 @@ class Painter:
         self.viewer.layers["mask"].brush_size = brush_size
         self.viewer.layers["mask"].mode = 'paint'
 
-        # Create widget
-        self.widget = QWidget()
-        self.layout = QVBoxLayout()
-
         # Create buttons
-        btn_next_image = QPushButton("Next Image")
-        btn_prev_image = QPushButton("Previous Image")
-        btn_save_mask = QPushButton("Save Mask")
-        btn_solve_labels = QPushButton("Solve Labels")
+        self.btn_next_image = QPushButton("Next Image")
+        self.btn_prev_image = QPushButton("Previous Image")
+        self.btn_save_mask = QPushButton("Save Mask")
+        self.btn_group_box = QGroupBox("Actions")
+        btn_group_layout = QVBoxLayout()
+        btn_group_layout.addWidget(self.btn_next_image)
+        btn_group_layout.addWidget(self.btn_prev_image)
+        btn_group_layout.addWidget(self.btn_save_mask)
+        self.btn_group_box.setLayout(btn_group_layout)
+        
+        # Connect buttons
+        self.btn_next_image.clicked.connect(self.next_image)
+        self.btn_prev_image.clicked.connect(self.prev_image)
+        self.btn_save_mask.clicked.connect(self.save_mask)
+        
+        # Create radio buttons
+        self.rad_semantic = QRadioButton("Semantic")
+        self.rad_instance = QRadioButton("Instance")
+        self.rad_instance.setChecked(True)
+        self.rad_group_box = QGroupBox("Segmentation")
+        rad_group_layout = QVBoxLayout()
+        rad_group_layout.addWidget(self.rad_semantic)
+        rad_group_layout.addWidget(self.rad_instance)
+        self.rad_group_box.setLayout(rad_group_layout)
 
         # Create texts
         self.info0  = QLabel()
@@ -120,29 +139,20 @@ class Painter:
         self.info2  = QLabel()
         self.info2.setFont(QFont("Consolas"))
         
-        # Add buttons and text to layout
-        self.layout.addWidget(btn_next_image)
-        self.layout.addWidget(btn_prev_image)
+        # Create layout
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.btn_group_box)
+        self.layout.addWidget(self.rad_group_box)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.info0)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(btn_solve_labels)
-        self.layout.addWidget(btn_save_mask)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.info1)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.info2)
 
-        # Add layout to widget
+        # Create widget
+        self.widget = QWidget()
         self.widget.setLayout(self.layout)
-
-        # Connect buttons
-        btn_next_image.clicked.connect(self.next_image)
-        btn_prev_image.clicked.connect(self.prev_image)
-        btn_save_mask.clicked.connect(self.save_mask)
-        btn_solve_labels.clicked.connect(self.solve_labels)
-
-        # Add the widget to viewer
         self.viewer.window.add_dock_widget(
             self.widget, area='right', name="Painter")
                 
@@ -229,7 +239,7 @@ class Painter:
                     yield
                     self.paint()
                 
-#%% Function(s) shortcuts -----------------------------------------------------
+#%% Function(s) general -------------------------------------------------------
                 
     # Viewer    
 
@@ -262,8 +272,9 @@ class Painter:
     def next_label(self):
         self.viewer.layers["mask"].selected_label += 1 
         
-    def free_label(self):
-        pass
+    def next_free_label(self):
+        self.viewer.layers["mask"].selected_label = np.max(
+            self.viewer.layers["mask"].data + 1)
         
     def prev_brush_size(self):
         if self.viewer.layers["mask"].brush_size > 1:
@@ -298,31 +309,12 @@ class Painter:
 #%% Function(s) get_stats() ---------------------------------------------------
        
     def get_stats(self):
-        
         msk = self.viewer.layers["mask"].data
         msk_obj = label(msk > 0 ^ find_boundaries(msk), connectivity=1)
         self.nObjects = np.maximum(0, len(np.unique(msk_obj)) - 1)
         self.nLabels = np.maximum(0, len(np.unique(msk)) - 1)
         self.minLabel = np.min(msk)
         self.maxLabel = np.max(msk)
-
-        # Get missing labels (between min & max label)
-        self.missLabels = []
-        for lbl in range(self.maxLabel):
-            if np.all(msk != lbl):
-                self.missLabels.append(f"{lbl}")
-        self.missLabels = ", ".join(self.missLabels) 
-
-        # Get duplicated labels (multi objects label)
-        lbls = []
-        for props in regionprops(msk_obj, intensity_image=msk):
-            lbls.append(int(props.intensity_max))
-        uniq, count = np.unique(lbls, return_counts=True)
-        self.dupLabels = []
-        for l, lbl in enumerate(uniq):
-            if count[l] > 1:
-                self.dupLabels.append(f"{lbl}({count[l]})")
-        self.dupLabels = ", ".join(self.dupLabels)
         
 #%% Function(s) solve_labels() ------------------------------------------------
 
@@ -341,6 +333,9 @@ class Painter:
 #%% Function(s) save_mask() ---------------------------------------------------
        
     def save_mask(self):
+        if self.rad_instance.isChecked():
+            self.solve_labels()
+            self.next_free_label()
         msk = self.viewer.layers["mask"].data
         msk_path = self.msk_paths[self.idx]
         self.msks[self.idx] = msk
@@ -399,7 +394,7 @@ class Painter:
         # statistic values
         style3 = (
             " style='"
-            "color: Brown;"
+            "color: Khaki;"
             "font-size: 10px;"
             "font-weight: normal;"
             "text-decoration: none;"
@@ -438,11 +433,7 @@ class Painter:
             f"<span{style2}>- minLabel       {'&nbsp;' * 6}:</span>"
             f"<span{style3}> {self.minLabel}</span><br>"
             f"<span{style2}>- maxLabel       {'&nbsp;' * 6}:</span>"
-            f"<span{style3}> {self.maxLabel}</span><br>"
-            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span>"
-            f"<span{style3}> {self.missLabels}</span><br>"       
-            f"<span{style2}>- dupLabel(s)    {'&nbsp;' * 3}:</span>"
-            f"<span{style3}> {self.dupLabels}</span>" 
+            f"<span{style3}> {self.maxLabel}</span>"
             
             )
         
