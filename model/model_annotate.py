@@ -9,24 +9,36 @@ from pathlib import Path
 # Qt
 from qtpy.QtGui import QFont
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget, QLabel
+from qtpy.QtWidgets import (
+    QPushButton, QCheckBox, QLineEdit, QRadioButton, QButtonGroup, QGroupBox, 
+    QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame
+    )
 
 # Skimage
+from skimage.morphology import binary_dilation
 from skimage.measure import label, regionprops
-from skimage.segmentation import find_boundaries, expand_labels
+from skimage.segmentation import find_boundaries, expand_labels, flood_fill
+
+# Scipy
+from scipy.ndimage import binary_fill_holes
 
 #%% Comments ------------------------------------------------------------------
 
 '''
-- To reduce loading time preload images in a list? Could be an optionnal
-- Get statistics, updated live or when saving mask?
+Current
+- Manage msk_suffix from within the class:
+    Problem#1 : End key cannot be used when focus in QLineEdit (find a way to use Enter?)
 
+Todo
+- B&C, auto? in the interface?
+- better tune brush resize method
+- Reset view on first image?
 '''
 
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, 'data', 'train_spores') 
+train_path = Path(Path.cwd().parent, "data", "train_battery") 
 
 # Parameters
 edit = True
@@ -41,103 +53,174 @@ brush_size = 10
 class Painter:
     def __init__(self, train_path, edit=True, randomize=True):
         self.train_path = train_path
+        self.edit = edit
+        self.randomize = randomize
         self.idx = 0
         self.init_paths()
         self.init_images()
         self.init_viewer()
-        self.update()
+        self.open_image()
         
         # Timers
         self.next_brush_size_timer = QTimer()
         self.next_brush_size_timer.timeout.connect(self.next_brush_size)
         self.prev_brush_size_timer = QTimer()
         self.prev_brush_size_timer.timeout.connect(self.prev_brush_size)
-
-    def update(self):
-        self.open_image()
-        self.get_info_text()
         
 #%% Initialize ----------------------------------------------------------------
         
     def init_paths(self):
-        self.img_paths = []
+        self.img_paths, self.msk_paths = [], []
         for img_path in self.train_path.iterdir():
             if "mask" not in img_path.name:
                 self.img_paths.append(img_path)
-        if randomize:
-            self.img_paths = np.random.permutation(self.img_paths).tolist()
+                self.msk_paths.append(
+                    Path(str(img_path).replace(".tif", "_mask.tif")))
+        if self.randomize:
+            permutation = np.random.permutation(len(self.img_paths))
+            self.img_paths = [self.img_paths[i] for i in permutation]
+            self.msk_paths = [self.msk_paths[i] for i in permutation]
+            
+    def update_msk_suffix(self):
+        self.msk_suffix = self.line_msk_suffix.text() 
+        
+    def update_msk_paths(self):
+        for i, msk_path in enumerate(self.msk_paths):
+            self.msk_paths[i] = Path(str(msk_path).replace(
+                ".tif", f"{self.msk_suffix}.tif"))
             
     def init_images(self):
-        self.imgs = []
-        for img_path in self.img_paths:
-            self.imgs.append(io.imread(img_path))
-        
+        self.imgs, self.msks = [], []
+        for img_path, msk_path in zip(self.img_paths, self.msk_paths):
+            img = io.imread(img_path)
+            if msk_path.exists() and self.edit:   
+                msk = io.imread(msk_path)
+            elif not msk_path.exists():
+                msk = np.zeros_like(img, dtype="uint8")
+            self.imgs.append(img)
+            self.msks.append(msk)
+
     def init_viewer(self):
                
         # Setup viewer
         self.viewer = napari.Viewer()
-        self.viewer.text_overlay.visible = True
-        self.viewer.text_overlay.text = ""
+        self.viewer.add_image(self.imgs[0], name="image")
+        self.viewer.add_labels(self.msks[0], name="mask")
+        self.viewer.layers["image"].contrast_limits = contrast_limits
+        self.viewer.layers["image"].gamma = 0.66
+        self.viewer.layers["mask"].brush_size = brush_size
+        self.viewer.layers["mask"].mode = 'paint'
+
+        # Create "Actions" menu
+        self.btn_next_image = QPushButton("Next Image")
+        self.btn_prev_image = QPushButton("Previous Image")
+        self.btn_save_mask = QPushButton("Save Mask")
+        self.act_group_box = QGroupBox("Actions")
+        act_group_layout = QVBoxLayout()
+        act_group_layout.addWidget(self.btn_next_image)
+        act_group_layout.addWidget(self.btn_prev_image)
+        act_group_layout.addWidget(self.btn_save_mask)
+        self.act_group_box.setLayout(act_group_layout)
+        self.btn_next_image.clicked.connect(self.next_image)
+        self.btn_prev_image.clicked.connect(self.prev_image)
+        self.btn_save_mask.clicked.connect(self.save_mask)
+        
+        # Create "Segmentation" menu
+        self.rad_semantic = QRadioButton("Semantic")
+        self.rad_instance = QRadioButton("Instance")
+        self.rad_instance.setChecked(True)
+        self.seg_group_box = QGroupBox("Segmentation")
+        seg_group_layout = QHBoxLayout()
+        seg_group_layout.addWidget(self.rad_semantic)
+        seg_group_layout.addWidget(self.rad_instance)
+        self.seg_group_box.setLayout(seg_group_layout)
+        
+        # Create "Options" menu
+        self.line_msk_suffix_title = QLabel("Mask Suffix :")
+        self.line_msk_suffix = QLineEdit("")
+        self.msk_suffix = self.line_msk_suffix.text() 
+        self.opt_group_box = QGroupBox("Options")
+        opt_group_layout = QHBoxLayout()
+        opt_group_layout.addWidget(self.line_msk_suffix_title)
+        opt_group_layout.addWidget(self.line_msk_suffix)
+        self.opt_group_box.setLayout(opt_group_layout)
+        self.line_msk_suffix.textChanged.connect(self.update_msk_suffix)
+
+        # Create texts
+        self.info_image = QLabel()
+        self.info_image.setFont(QFont("Consolas"))
+        self.info_stats = QLabel()
+        self.info_stats.setFont(QFont("Consolas"))
+        self.info_short = QLabel()
+        self.info_short.setFont(QFont("Consolas"))
+        
+        # Create layout
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.act_group_box)
+        self.layout.addWidget(self.seg_group_box)
+        self.layout.addWidget(self.opt_group_box)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.info_image)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.info_stats)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.info_short)
 
         # Create widget
         self.widget = QWidget()
-        self.layout = QVBoxLayout()
-
-        # Create buttons
-        btn_save_mask = QPushButton("Save Mask")
-        btn_next_image = QPushButton("Next Image")
-        btn_prev_image = QPushButton("Previous Image")
-
-        # Create texts
-        self.info = QLabel()
-        self.info.setFont(QFont("Consolas"))
-        
-        # Add buttons and text to layout
-        self.layout.addWidget(btn_save_mask)
-        self.layout.addWidget(btn_next_image)
-        self.layout.addWidget(btn_prev_image)
-        self.layout.addSpacing(20)
-        self.layout.addWidget(self.info)
-
-        # Add layout to widget
         self.widget.setLayout(self.layout)
-
-        # Connect buttons
-        btn_save_mask.clicked.connect(self.save_mask)
-        btn_next_image.clicked.connect(self.next_image)
-        btn_prev_image.clicked.connect(self.prev_image)
-
-        # Add the widget to viewer
         self.viewer.window.add_dock_widget(
-            self.widget, area='right', name="Painter")
-        
+            self.widget, area="right", name="Painter")
+                
 #%% Shortcuts -----------------------------------------------------------------
         
-        @self.viewer.bind_key("End", overwrite=True)
+        # Viewer
+
+        @self.viewer.bind_key("PageDown", overwrite=True)
+        def previous_image_key(viewer):
+            self.prev_image()
+        
+        @self.viewer.bind_key("PageUp", overwrite=True)
+        def next_image_key(viewer):
+            self.next_image()
+            
+        @self.viewer.bind_key("ENTER", overwrite=True)
         def save_mask_key(viewer):
             self.save_mask() 
             
-        @self.viewer.bind_key('Down', overwrite=True)
-        def prev_label_key(viewer):
-            self.prev_label()
-            
-        @self.viewer.bind_key('PageUp', overwrite=True)
-        def next_image_key(viewer):
-            self.next_image()
-
         @self.viewer.bind_key("0", overwrite=True)
-        def pan_switch0(viewer):
+        def pan_switch_key0(viewer):
             self.pan()
             yield
             self.paint()
             
         @self.viewer.bind_key("Space", overwrite=True)
-        def pan_switch1(viewer):
+        def pan_switch_key1(viewer):
             self.pan()
             yield
             self.paint()
             
-        @self.viewer.bind_key('Right', overwrite=True)
+        @self.viewer.bind_key("Backspace", overwrite=True)
+        def hide_labels_key(viewer):
+            self.hide_labels()
+            yield
+            self.show_labels()
+            
+        @self.viewer.bind_key("Home", overwrite=True)
+        def reset_view_key(viewer):
+            self.reset_view()
+            
+        # Paint
+            
+        @self.viewer.bind_key("Down", overwrite=True)
+        def prev_label_key(viewer):
+            self.prev_label()
+            
+        @self.viewer.bind_key("Up", overwrite=True)
+        def next_label_key(viewer):
+            self.next_label()
+            
+        @self.viewer.bind_key("Right", overwrite=True)
         def next_brush_size_key(viewer):
             self.next_brush_size() 
             time.sleep(150 / 1000) 
@@ -145,89 +228,133 @@ class Painter:
             yield
             self.next_brush_size_timer.stop()
             
-        @self.viewer.bind_key('Left', overwrite=True)
+        @self.viewer.bind_key("Left", overwrite=True)
         def prev_brush_size_key(viewer):
             self.prev_brush_size() 
             time.sleep(150 / 1000) 
             self.prev_brush_size_timer.start(10) 
             yield
             self.prev_brush_size_timer.stop()
-            
-        @self.viewer.bind_key('Up', overwrite=True)
-        def next_label_key(viewer):
-            self.next_label()
-
-        @self.viewer.bind_key('PageDown', overwrite=True)
-        def previous_image_key(viewer):
-            self.prev_image()
-            
+                       
         @self.viewer.mouse_drag_callbacks.append
-        def erase(viewer, event):
-            if event.button==2:
-                self.erase()
+        def mouse_actions(viewer, event):
+            
+            if "Control" in event.modifiers:
+                if event.button == 1:
+                    self.fill()
+                    yield
+                    self.paint()
+                elif event.button == 2:
+                    position = event.position
+                    self.erase()
+                    self.erase_label(position)
+                    yield
+                    self.paint()
+            
+            if "Shift" in event.modifiers:      
+                self.pick()
                 yield
                 self.paint()
-                
-#%% Function(s) general -------------------------------------------------------
-                
-    def next_image(self): 
-        self.idx += 1
-        self.update()
             
+            else:
+                if event.button == 2:
+                    self.erase()
+                    yield
+                    self.paint()
+
+#%% Function(s) shortcuts -----------------------------------------------------
+                
+    # Viewer    
+
     def prev_image(self):
         self.idx -= 1
-        self.update()
+        self.open_image()
         
-    def next_label(self):
-        self.viewer.layers["mask"].selected_label += 1 
+    def next_image(self): 
+        self.idx += 1
+        self.open_image()
+        
+    def pan(self):
+        self.viewer.layers["mask"].mode = "pan_zoom"
+        
+    def show_labels(self):
+        self.viewer.layers["mask"].visible = True
+    
+    def hide_labels(self):
+        self.viewer.layers["mask"].visible = False  
+        
+    def reset_view(self):
+        self.viewer.reset_view()
 
+    # Paint
+    
     def prev_label(self):
         if self.viewer.layers["mask"].selected_label > 1:
             self.viewer.layers["mask"].selected_label -= 1 
             
-    def next_brush_size(self):
-        self.viewer.layers["mask"].brush_size += 1
-        
+    def next_label(self):
+        self.viewer.layers["mask"].selected_label += 1 
+               
     def prev_brush_size(self):
         if self.viewer.layers["mask"].brush_size > 1:
             self.viewer.layers["mask"].brush_size -= 1
         
+    def next_brush_size(self): 
+        self.viewer.layers["mask"].brush_size += 1
+
     def paint(self):
-        self.viewer.layers["mask"].mode = 'paint'
+        self.viewer.layers["mask"].mode = "paint"
+        
+    def fill(self):
+        self.viewer.layers["mask"].mode = "fill"
             
     def erase(self):
-        self.viewer.layers["mask"].mode = 'erase'
+        self.viewer.layers["mask"].mode = "erase"
         
-    def pan(self):
-        self.viewer.layers["mask"].mode = 'pan_zoom'
-        
-#%% Function(s) open_image() --------------------------------------------------
-        
-    def open_image(self):
-        
-        self.viewer.layers.clear()
-        img_path = self.img_paths[self.idx]
-        msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
-        
-        if msk_path.exists() and edit:   
-            img = io.imread(img_path)
-            msk = io.imread(msk_path)
-        elif not msk_path.exists():
-            img = io.imread(img_path)
-            msk = np.zeros_like(img, dtype="uint8")
-            
-        self.viewer.add_image(img, name="image")
-        self.viewer.add_labels(msk, name="mask")
-        self.viewer.layers["image"].contrast_limits = contrast_limits
-        self.viewer.layers["image"].gamma = 0.66
-        self.viewer.layers["mask"].brush_size = brush_size
-        self.viewer.layers["mask"].selected_label = 1
-        self.viewer.layers["mask"].mode = 'paint'
+    def pick(self):
+        self.viewer.layers["mask"].mode = "pick"
 
-#%% Function(s) get_stats() ---------------------------------------------------
-       
-    def get_stats(self):
+    def erase_label(self, position):
+        position = tuple((int(position[0]), int(position[1])))
+        self.viewer.layers["mask"].data = flood_fill(
+            self.viewer.layers["mask"].data, position, 0)
         
+#%% Function(s) main ----------------------------------------------------------
+        
+    def next_free_label(self):
+        self.viewer.layers["mask"].selected_label = np.max(
+            self.viewer.layers["mask"].data + 1)
+
+    def open_image(self):
+        self.viewer.layers["image"].data = self.imgs[self.idx].copy()
+        self.viewer.layers["mask"].data = self.msks[self.idx].copy()
+        self.next_free_label()
+        self.get_info_text()
+        self.reset_view()
+               
+    def solve_labels(self):
+        msk = self.viewer.layers["mask"].data
+        msk_obj = msk.copy()
+        msk_obj[find_boundaries(msk) == 1] = 0
+        msk_obj = label(msk_obj, connectivity=1)
+        msk_obj = expand_labels(msk_obj)
+        msk_obj[msk == 0] = 0
+        self.viewer.layers["mask"].data = msk_obj
+        
+    def save_mask(self):
+        if self.rad_instance.isChecked():
+            self.solve_labels()
+            self.next_free_label()
+        msk = self.viewer.layers["mask"].data
+        self.update_msk_paths()
+        msk_path = self.msk_paths[self.idx]
+        self.msks[self.idx] = msk
+        io.imsave(msk_path, msk, check_contrast=False) 
+        self.get_info_text()
+
+#%% Function(s) info ----------------------------------------------------------
+        
+    def get_stats(self):
         msk = self.viewer.layers["mask"].data
         msk_obj = label(msk > 0 ^ find_boundaries(msk), connectivity=1)
         self.nObjects = np.maximum(0, len(np.unique(msk_obj)) - 1)
@@ -235,160 +362,91 @@ class Painter:
         self.minLabel = np.min(msk)
         self.maxLabel = np.max(msk)
 
-        # Get missing labels (between min & max label)
-        self.missLabels = []
-        for lbl in range(self.maxLabel):
-            if np.all(msk != lbl):
-                self.missLabels.append(f"{lbl}")
-        self.missLabels = ", ".join(self.missLabels) 
-
-        # Get duplicated labels (multi objects label)
-        lbls = []
-        for props in regionprops(msk_obj, intensity_image=msk):
-            lbls.append(int(props.intensity_max))
-        uniq, count = np.unique(lbls, return_counts=True)
-        self.dupLabels = []
-        for l, lbl in enumerate(uniq):
-            if count[l] > 1:
-                self.dupLabels.append(f"{lbl}({count[l]})")
-        self.dupLabels = ", ".join(self.dupLabels)
-        
-#%% Function(s) solve_labels() ------------------------------------------------
-
-    def solve_labels(self):
-        msk = self.viewer.layers["mask"].data
-        msk_obj = label(msk > 0 ^ find_boundaries(msk), connectivity=1)
-        msk_obj = expand_labels(msk_obj)
-        msk_obj[msk == 0] = 0
-        self.viewer.layers["mask"].data = msk_obj
-            
-#%% Function(s) save_mask() ---------------------------------------------------
-       
-    def save_mask(self):
-        img_path = self.img_paths[self.idx]
-        msk_path = Path(str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
-        io.imsave(msk_path, self.viewer.layers["mask"].data, check_contrast=False)  
-        self.get_info_text()
-       
-#%% Function(s) get_info_text() -----------------------------------------------
-        
     def get_info_text(self):
-        
+               
         def shorten_filename(name, max_length=32):
             if len(name) > max_length:
                 parts = name.split('_')
-                return parts[0] + "..." + parts[-1]
+                if "mask" not in name:
+                    return parts[0] + "..." + parts[-1]
+                else:
+                    return parts[0] + "..." + parts[-2] + "_" + parts[-1]
             else:
                 return name
-        
+            
+        def set_style(color, size, weight, decoration):
+            return (
+                " style='"
+                f"color: {color};"
+                f"font-size: {size}px;"
+                f"font-weight: {weight};"
+                f"text-decoration: {decoration};"
+                "'"
+                )
+
+        self.get_stats()
         img_path = self.img_paths[self.idx]
-        msk_path = Path(
-            str(img_path).replace(".tif", f"_mask-{mask_type}.tif"))
+        msk_path = self.msk_paths[self.idx]
         img_name = img_path.name    
         if msk_path.exists() and edit:
             msk_name = msk_path.name 
         elif not msk_path.exists():
             msk_name = "None"
-            
-        self.get_stats()
+        img_name = shorten_filename(img_name, max_length=32)
+        msk_name = shorten_filename(msk_name, max_length=32)
 
-        # titles
-        style0 = (
-            " style='"
-            "color: White;"
-            "font-size: 10px;"
-            "font-weight: normal;"
-            "text-decoration: underline;"
-            "'"
-            )
-        # filenames
-        style1 = (
-            " style='"
-            "color: Khaki;"
-            "font-size: 10px;"
-            "font-weight: normal;"
-            "text-decoration: none;"
-            "'"
-            ) 
-        # Legend
-        style2 = (
-            " style='"
-            "color: LightGray;"
-            "font-size: 10px;"
-            "font-weight: normal;"
-            "text-decoration: none;"        
-            "'"
-            )
-        # statistic values
-        style3 = (
-            " style='"
-            "color: Tan;"
-            "font-size: 10px;"
-            "font-weight: normal;"
-            "text-decoration: none;"
-            "'"
-            )
-        # shortcut actions
-        style4 = (
-            " style='"
-            "color: LightSteelBlue;"
-            "font-size: 10px;"
-            "font-weight: normal;"
-            "text-decoration: none;"
-            "'"
-            )
+        # Set styles (Titles)
+        style0 = set_style("White", 10, "normal", "underline")
+        # Set styles (Filenames)
+        style1 = set_style("Khaki", 10, "normal", "none")
+        # Set styles (Legend)
+        style2 = set_style("LightGray", 10, "normal", "none")
+        # Set styles (Values)
+        style3 = set_style("LightSteelBlue", 10, "normal", "none")
+        # Set styles (Shortcuts)
+        style4 = set_style("BurlyWood", 10, "normal", "none")
+        spacer = "&nbsp;"
 
-        self.info.setText(
+        self.info_image.setText(
+            f"<p{style0}>Image/Mask<br><br>"
+            f"<span{style1}>{img_name}</span><br>"
+            f"<span{style1}>{msk_name}</span>"
+            )
             
-            # Image
-            f"<p{style0}>Image<br><br>"
-            f"<span {style1}>{shorten_filename(img_name, max_length=32)}</span>"
-            
-            # Mask
-            f"<p{style0}>Mask<br><br>"
-            f"<span{style1}>{shorten_filename(msk_name, max_length=32)}</span>"
-            
-            # Statistics
+        self.info_stats.setText(
             f"<p{style0}>Statistics<br><br>"
-            f"<span{style2}>- nObject(s)     {'&nbsp;' * 4}:</span>"
+            f"<span{style2}>- n of Object(s)  {spacer * 1}:</span>"
             f"<span{style3}> {self.nObjects}</span><br>"
-            f"<span{style2}>- nLabel(s)      {'&nbsp;' * 5}:</span>"
+            f"<span{style2}>- n of Label(s)   {spacer * 2}:</span>"
             f"<span{style3}> {self.nLabels}</span><br>"
-            f"<span{style2}>- minLabel       {'&nbsp;' * 6}:</span>"
-            f"<span{style3}> {self.minLabel}</span><br>"
-            f"<span{style2}>- maxLabel       {'&nbsp;' * 6}:</span>"
-            f"<span{style3}> {self.maxLabel}</span><br>"
-            f"<span{style2}>- missLabel(s)   {'&nbsp;' * 2}:</span>"
-            f"<span{style3}> {self.missLabels}</span><br>"       
-            f"<span{style2}>- dupLabel(s)   {'&nbsp;' * 3}:</span>"
-            f"<span{style3}> {self.dupLabels}</span><br>" 
-            
-            # Shortcuts
-            f"<p{style0}>Shortcuts<br><br>"
-            f"<span{style2}>- Save Mask      {'&nbsp;' * 5}:</span>"
-            f"<span{style4}> End</span><br>"
-            f"<span{style2}>- Next Image     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> PageUp</span><br>"
-            f"<span{style2}>- Previous Image {'&nbsp;' * 0}:</span>"
-            f"<span{style4}> PageDown</span><br>"
-            f"<span{style2}>- Next Label     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> ArrowUp</span><br>"
-            f"<span{style2}>- Previous Label {'&nbsp;' * 0}:</span>"
-            f"<span{style4}> ArrowDown</span><br>"
-            f"<span{style2}>- Increase brush {'&nbsp;' * 0}:</span>"
-            f"<span{style4}> ArrowRight</span><br>"
-            f"<span{style2}>- Decrease brush {'&nbsp;' * 0}:</span>"
-            f"<span{style4}> ArrowLeft</span><br>"
-            f"<span{style2}>- Paint tool     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> LeftClick</span><br>"
-            f"<span{style2}>- Erase tool     {'&nbsp;' * 4}:</span>"
-            f"<span{style4}> RightClick</span><br>"
-            f"<span{style2}>- Pan Image      {'&nbsp;' * 5}:</span>"
-            f"<span{style4}> num[0]</span><br>"
-            
-            # f"<span{style2}>- Fill tool      {'&nbsp;' * 5}:</span>"
-            # f"<span{style4}> Home</span><br>"
-            
+            f"<span{style2}>- min/max Label   {spacer * 2}:</span>"
+            f"<span{style3}> {self.minLabel}/{self.maxLabel}</span>"
+            )
+        
+        self.info_short.setText(
+            f"<p{style0}>Shortcuts<br><br>"            
+            f"<span{style2}>- Save Mask       {spacer * 6}:</span>"
+            f"<span{style4}> End</span><br>"            
+            f"<span{style2}>- Reset View      {spacer * 5}:</span>"
+            f"<span{style4}> Home</span><br>"
+            f"<span{style2}>- Pan Image       {spacer * 6}:</span>"
+            f"<span{style4}> Spacebar</span><br>"            
+            f"<span{style2}>- Hide Labels     {spacer * 4}:</span>"
+            f"<span{style4}> Backspace</span><br>"            
+            f"<span{style2}>- Next/Prev Image {spacer * 0}:</span>"
+            f"<span{style4}> Page[Up/Down]</span><br>"
+            f"<span{style2}>- Next/Prev Label {spacer * 0}:</span>"
+            f"<span{style4}> Arrow[Up/Down]</span><br>"                        
+            f"<span{style2}>- Decr/Incr Brush {spacer * 0}:</span>"
+            f"<span{style4}> Arrow[Left/Right]</span><br>"                        
+            f"<span{style2}>- Paint/Erase     {spacer * 4}:</span>"
+            f"<span{style4}> Mouse[left/Right]</span><br>"           
+            f"<span{style2}>- Fill Object     {spacer * 4}:</span>"
+            f"<span{style4}> Ctrl+Mouse[left]</span><br>"            
+            f"<span{style2}>- Delete Object   {spacer * 2}:</span>"
+            f"<span{style4}> Ctrl+Mouse[right]</span><br>"          
+            f"<span{style2}>- Pick Label      {spacer * 5}:</span>"
+            f"<span{style4}> Shift+Mouse[Left]</span><br>"
             )
         
 #%% Execute -------------------------------------------------------------------
