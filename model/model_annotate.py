@@ -1,10 +1,14 @@
 #%% Imports -------------------------------------------------------------------
 
 import time
-import napari
 import numpy as np
 from skimage import io
 from pathlib import Path
+
+# Napari
+import napari
+from napari.layers.labels.labels import Labels
+from napari.layers.image.image import Image
 
 # Qt
 from qtpy.QtGui import QFont
@@ -25,27 +29,21 @@ from scipy.ndimage import binary_fill_holes
 #%% Comments ------------------------------------------------------------------
 
 '''
-Current
-- Manage msk_suffix from within the class:
-    Problem#1 : End key cannot be used when focus in QLineEdit (find a way to use Enter?)
-
 Todo
-- B&C, auto? in the interface?
-- better tune brush resize method
+- Slower brush resizing
 - Reset view on first image?
+- Error when reaching last image (circular indexing)
 '''
 
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, "data", "train_battery") 
+train_path = Path(Path.cwd().parent, "data", "train_spores") 
 
 # Parameters
 edit = True
-mask_type = "mask"
 randomize = True
 np.random.seed(42)
-contrast_limits = (0, 1)
 brush_size = 10
 
 #%% Class : Painter() ---------------------------------------------------------
@@ -106,17 +104,22 @@ class Painter:
         self.viewer = napari.Viewer()
         self.viewer.add_image(self.imgs[0], name="image")
         self.viewer.add_labels(self.msks[0], name="mask")
-        self.viewer.layers["image"].contrast_limits = contrast_limits
-        self.viewer.layers["image"].gamma = 0.66
         self.viewer.layers["mask"].brush_size = brush_size
         self.viewer.layers["mask"].mode = 'paint'
+        
+        # Contrast limits
+        val = np.hstack([img.ravel() for img in self.imgs])
+        self.contrast_limits = (
+            np.quantile(val, 0.001), np.quantile(val, 0.999))
+        self.viewer.layers["image"].contrast_limits = self.contrast_limits
+        self.viewer.layers["image"].gamma = 0.66
 
         # Create "Actions" menu
+        self.act_group_box = QGroupBox("Actions")
+        act_group_layout = QVBoxLayout()
         self.btn_next_image = QPushButton("Next Image")
         self.btn_prev_image = QPushButton("Previous Image")
         self.btn_save_mask = QPushButton("Save Mask")
-        self.act_group_box = QGroupBox("Actions")
-        act_group_layout = QVBoxLayout()
         act_group_layout.addWidget(self.btn_next_image)
         act_group_layout.addWidget(self.btn_prev_image)
         act_group_layout.addWidget(self.btn_save_mask)
@@ -126,22 +129,22 @@ class Painter:
         self.btn_save_mask.clicked.connect(self.save_mask)
         
         # Create "Segmentation" menu
+        self.seg_group_box = QGroupBox("Segmentation")
+        seg_group_layout = QHBoxLayout()
         self.rad_semantic = QRadioButton("Semantic")
         self.rad_instance = QRadioButton("Instance")
         self.rad_instance.setChecked(True)
-        self.seg_group_box = QGroupBox("Segmentation")
-        seg_group_layout = QHBoxLayout()
         seg_group_layout.addWidget(self.rad_semantic)
         seg_group_layout.addWidget(self.rad_instance)
         self.seg_group_box.setLayout(seg_group_layout)
         
         # Create "Options" menu
-        self.line_msk_suffix_title = QLabel("Mask Suffix :")
+        self.opt_group_box = QGroupBox("Options")
+        opt_group_layout = QVBoxLayout()
+        self.line_msk_suffix_label = QLabel("Mask Suffix :")
         self.line_msk_suffix = QLineEdit("")
         self.msk_suffix = self.line_msk_suffix.text() 
-        self.opt_group_box = QGroupBox("Options")
-        opt_group_layout = QHBoxLayout()
-        opt_group_layout.addWidget(self.line_msk_suffix_title)
+        opt_group_layout.addWidget(self.line_msk_suffix_label)
         opt_group_layout.addWidget(self.line_msk_suffix)
         self.opt_group_box.setLayout(opt_group_layout)
         self.line_msk_suffix.textChanged.connect(self.update_msk_suffix)
@@ -170,8 +173,8 @@ class Painter:
         self.widget = QWidget()
         self.widget.setLayout(self.layout)
         self.viewer.window.add_dock_widget(
-            self.widget, area="right", name="Painter")
-                
+            self.widget, area="right", name="Painter") 
+        
 #%% Shortcuts -----------------------------------------------------------------
         
         # Viewer
@@ -184,10 +187,14 @@ class Painter:
         def next_image_key(viewer):
             self.next_image()
             
-        @self.viewer.bind_key("ENTER", overwrite=True)
+        @Labels.bind_key("Enter", overwrite=True)
         def save_mask_key(viewer):
             self.save_mask() 
-            
+
+        # @self.viewer.bind_key("Enter", overwrite=True)
+        # def save_mask_key(viewer):
+        #     self.save_mask() 
+
         @self.viewer.bind_key("0", overwrite=True)
         def pan_switch_key0(viewer):
             self.pan()
@@ -200,13 +207,13 @@ class Painter:
             yield
             self.paint()
             
-        @self.viewer.bind_key("Backspace", overwrite=True)
+        @self.viewer.bind_key("End", overwrite=True)
         def hide_labels_key(viewer):
             self.hide_labels()
             yield
             self.show_labels()
             
-        @self.viewer.bind_key("Home", overwrite=True)
+        @self.viewer.bind_key("Backspace", overwrite=True)
         def reset_view_key(viewer):
             self.reset_view()
             
@@ -223,16 +230,16 @@ class Painter:
         @self.viewer.bind_key("Right", overwrite=True)
         def next_brush_size_key(viewer):
             self.next_brush_size() 
-            time.sleep(150 / 1000) 
-            self.next_brush_size_timer.start(10) 
+            # time.sleep(125 / 1000) 
+            self.next_brush_size_timer.start(1) 
             yield
             self.next_brush_size_timer.stop()
             
         @self.viewer.bind_key("Left", overwrite=True)
         def prev_brush_size_key(viewer):
             self.prev_brush_size() 
-            time.sleep(150 / 1000) 
-            self.prev_brush_size_timer.start(10) 
+            # time.sleep(125 / 1000) 
+            self.prev_brush_size_timer.start(1) 
             yield
             self.prev_brush_size_timer.stop()
                        
@@ -426,13 +433,13 @@ class Painter:
         self.info_short.setText(
             f"<p{style0}>Shortcuts<br><br>"            
             f"<span{style2}>- Save Mask       {spacer * 6}:</span>"
-            f"<span{style4}> End</span><br>"            
+            f"<span{style4}> Enter</span><br>"            
             f"<span{style2}>- Reset View      {spacer * 5}:</span>"
-            f"<span{style4}> Home</span><br>"
+            f"<span{style4}> Backspace</span><br>"
             f"<span{style2}>- Pan Image       {spacer * 6}:</span>"
             f"<span{style4}> Spacebar</span><br>"            
             f"<span{style2}>- Hide Labels     {spacer * 4}:</span>"
-            f"<span{style4}> Backspace</span><br>"            
+            f"<span{style4}> End</span><br>"            
             f"<span{style2}>- Next/Prev Image {spacer * 0}:</span>"
             f"<span{style4}> Page[Up/Down]</span><br>"
             f"<span{style2}>- Next/Prev Label {spacer * 0}:</span>"
@@ -453,3 +460,6 @@ class Painter:
 
 if __name__ == "__main__":
     painter = Painter(train_path, edit=edit, randomize=randomize)
+
+#%%
+
