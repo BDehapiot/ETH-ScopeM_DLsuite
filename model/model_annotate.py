@@ -1,6 +1,5 @@
 #%% Imports -------------------------------------------------------------------
 
-import time
 import numpy as np
 from skimage import io
 from pathlib import Path
@@ -8,37 +7,32 @@ from pathlib import Path
 # Napari
 import napari
 from napari.layers.labels.labels import Labels
-from napari.layers.image.image import Image
 
 # Qt
 from qtpy.QtGui import QFont
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import (
-    QPushButton, QCheckBox, QLineEdit, QRadioButton, QButtonGroup, QGroupBox, 
-    QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame
+    QPushButton, QLineEdit, QRadioButton, QGroupBox, 
+    QVBoxLayout, QHBoxLayout, QWidget, QLabel
     )
 
 # Skimage
-from skimage.morphology import binary_dilation
-from skimage.measure import label, regionprops
+from skimage.measure import label
 from skimage.segmentation import find_boundaries, expand_labels, flood_fill
-
-# Scipy
-from scipy.ndimage import binary_fill_holes
 
 #%% Comments ------------------------------------------------------------------
 
 '''
 Todo
-- Slower brush resizing
 - Reset view on first image?
-- Error when reaching last image (circular indexing)
+- RGB image support
+- Parameter handling (default, autosaved etc)
 '''
 
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, "data", "train_spores") 
+train_path = Path(Path.cwd().parent, "data", "train_battery") 
 
 # Parameters
 edit = True
@@ -49,6 +43,7 @@ brush_size = 10
 #%% Class : Painter() ---------------------------------------------------------
 
 class Painter:
+    
     def __init__(self, train_path, edit=True, randomize=True):
         self.train_path = train_path
         self.edit = edit
@@ -231,7 +226,7 @@ class Painter:
         def next_brush_size_key(viewer):
             self.next_brush_size() 
             # time.sleep(125 / 1000) 
-            self.next_brush_size_timer.start(1) 
+            self.next_brush_size_timer.start(30) 
             yield
             self.next_brush_size_timer.stop()
             
@@ -239,7 +234,7 @@ class Painter:
         def prev_brush_size_key(viewer):
             self.prev_brush_size() 
             # time.sleep(125 / 1000) 
-            self.prev_brush_size_timer.start(1) 
+            self.prev_brush_size_timer.start(30) 
             yield
             self.prev_brush_size_timer.stop()
                        
@@ -262,7 +257,6 @@ class Painter:
                 self.pick()
                 yield
                 self.paint()
-            
             else:
                 if event.button == 2:
                     self.erase()
@@ -274,12 +268,14 @@ class Painter:
     # Viewer    
 
     def prev_image(self):
-        self.idx -= 1
-        self.open_image()
+        if self.idx > 0:
+            self.idx -= 1
+            self.open_image()
         
-    def next_image(self): 
-        self.idx += 1
-        self.open_image()
+    def next_image(self):
+        if self.idx < len(self.imgs) - 1:
+            self.idx += 1
+            self.open_image()
         
     def pan(self):
         self.viewer.layers["mask"].mode = "pan_zoom"
@@ -460,6 +456,3 @@ class Painter:
 
 if __name__ == "__main__":
     painter = Painter(train_path, edit=edit, randomize=randomize)
-
-#%%
-
