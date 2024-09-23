@@ -32,7 +32,7 @@ Todo
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, "data", "train_battery") 
+train_path = Path(Path.cwd().parent, "data", "train_battery")
 
 # Parameters
 edit = True
