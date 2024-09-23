@@ -26,6 +26,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 #%% Comments ------------------------------------------------------------------
 
 '''
+- Save model weights & associated data in dedicated folders (gitignore also)
 - Set live update (log & plot see chatGPT)
 - Add support for multi-labels semantic segmentation (multi-class training)
 - Make a wrapper function for the full process 
