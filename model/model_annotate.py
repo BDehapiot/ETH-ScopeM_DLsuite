@@ -24,6 +24,7 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 
 '''
 Todo
+- Something wrong with font size in new Napari version
 - Reset view on first image?
 - RGB image support
 - Parameter handling (default, autosaved etc)

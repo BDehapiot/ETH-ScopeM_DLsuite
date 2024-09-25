@@ -168,38 +168,21 @@ def augment(imgs, msks, iterations):
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 class CustomCallback(Callback):
-    def __init__(
-            self, 
-            epochs, 
-            backbone, 
-            batch_size, 
-            validation_split, 
-            learning_rate, 
-            patience,
-            path,
-            ):
+    def __init__(self, epochs):
         super(CustomCallback, self).__init__()
         self.epochs = epochs
-        self.backbone = backbone
-        self.batch_size = batch_size
-        self.validation_split = validation_split
-        self.learning_rate = learning_rate
-        self.patience = patience
-        self.path = path
         self.trn_loss = []
         self.val_loss = []
         self.trn_mse = []
         self.val_mse = []
+        self.fig, (self.ax0, self.ax1) = plt.subplots(2, 1, figsize=(12, 12))
+        self.ax0in = None
+        plt.ion()
         
-        # Initialize plot
-        self.fig, self.ax = plt.subplots(figsize=(12, 8))
-        self.fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.3)
-        self.axsub = None
-        
+        # rcParams
         plt.rcParams["font.family"] = "Consolas"
         plt.rcParams["font.size"] = 12
-        plt.ion()
-
+    
     def on_epoch_end(self, epoch, logs=None):
         
         # Get loss and mse values
@@ -208,76 +191,70 @@ class CustomCallback(Callback):
         self.trn_mse.append(logs["mse"])
         self.val_mse.append(logs.get("val_mse"))
 
-        # Main plot -----------------------------------------------------------
-        
-        self.ax.clear()
-        self.ax.plot(
-            range(1, epoch + 2), self.trn_loss, "y", label="training loss")
-        self.ax.plot(
-            range(1, epoch + 2), self.val_loss, "r", label="validation loss")
-        self.ax.set_title(f"loss")
-        self.ax.set_xlabel("epochs")
-        self.ax.set_ylabel("loss")
-        self.ax.legend(loc="upper left")
-                
-        # Subplot -------------------------------------------------------------
-        
-        if self.axsub is not None:
-            self.axsub.clear()
-        else:
-            self.axsub = inset_axes(
-                self.ax, width="50%", height="50%", loc="upper right")
-        self.axsub.plot(
-            range(1, epoch + 2), self.trn_loss, "y", label="training loss")
-        self.axsub.plot(
-            range(1, epoch + 2), self.val_loss, "r", label="validation loss")
-        self.axsub.set_xlabel("epochs")
-        self.axsub.set_ylabel("loss")
-        self.axsub.set_ylim(0, 1)
-                       
-        # Info ----------------------------------------------------------------
-
-        self.vloss_best = np.min(self.val_loss)
-        self.epoch_best = np.argmin(self.val_loss)
-
-        info_parameters = (
-            
-            f"Parameters\n"
-            f"----------\n"
-            f"epochs           : {self.epochs}\n"
-            f"backbone         : '{self.backbone}'\n"
-            f"batch_size       : {self.batch_size}\n"
-            f"validation_split : {self.validation_split}\n"
-            f"learning_rate    : {self.learning_rate}\n"
-            f"patience         : {self.patience}\n"
-            
+        # Print custom progress message
+        print(
+            f"Epoch {epoch + 1}/{self.epochs}\n"
+            f"trn_loss: {logs['loss']:.4f} | "
+            f"val_loss: {logs['val_loss']:.4f} | "
+            f"trn_mse: {logs['mse']:.4f} | "
+            f"val_mse: {logs['val_mse']:.4f}"
             )
 
-        self.ax.text(
-            0.01, -0.1, info_parameters,  
-            transform=self.ax.transAxes, 
-            ha="left", va="top", color="black",
-            )
-
-        info_monitoring = (
-
-            f"Monitoring\n"
-            f"----------\n"
+        # ---------------------------------------------------------------------
+        
+        self.ax0.clear()
+        self.ax0.plot(
+            range(1, epoch + 2), self.trn_loss, "y", label="training loss")
+        self.ax0.plot(
+            range(1, epoch + 2), self.val_loss, "r", label="validation loss")
+        self.ax0.set_title("loss")
+        self.ax0.set_xlabel("epochs")
+        self.ax0.set_ylabel("loss")
+        self.ax0.legend(loc="upper left")
+        
+        info0 = (
             f"epoch    : {epoch + 1}/{self.epochs}\n"
             f"trn_loss : {logs['loss']:.4f}\n"
-            f"val_loss : {logs['val_loss']:.4f}({self.vloss_best:.4f})\n"
+            f"val_loss : {logs['val_loss']:.4f}\n"
             f"trn_mse  : {logs['loss']:.4f}\n"
             f"val_mse  : {logs['val_loss']:.4f}\n"
-            
+            "-------------------------------------\n"
+            f"best     : {np.min(self.val_loss):.4f} ({np.argmin(self.val_loss) + 1})\n"
+            f"patience : {epoch - np.argmin(self.val_loss)}"
             )
         
-        self.ax.text(
-            0.31, -0.1, info_monitoring,  
-            transform=self.ax.transAxes, 
-            ha="left", va="top", color="black",
+        self.ax0.text(
+            0.010, 1.02, info0,  
+            transform=self.ax0.transAxes, 
+            ha="left", va="bottom", color="black",
             )
         
-        # Draw ----------------------------------------------------------------
+        if self.ax0in is not None:
+            self.ax0in.clear()
+        else:
+            self.ax0in = inset_axes(
+                self.ax0, width="50%", height="50%", loc="upper right")
+        self.ax0in.plot(
+            range(1, epoch + 2), self.trn_loss, "y", label="training loss")
+        self.ax0in.plot(
+            range(1, epoch + 2), self.val_loss, "r", label="validation loss")
+        self.ax0in.set_xlabel("epochs")
+        self.ax0in.set_ylabel("loss")
+        self.ax0in.set_ylim(0, 1)
+        
+        # ---------------------------------------------------------------------
+        
+        self.ax1.clear()
+        self.ax1.plot(
+            range(1, epoch + 2), self.trn_mse, "b", label="training MSE")
+        self.ax1.plot(
+            range(1, epoch + 2), self.val_mse, "g", label="validation MSE")
+        self.ax1.set_title("MSE")
+        self.ax1.set_xlabel("epochs")
+        self.ax1.set_ylabel("MSE")
+        self.ax1.legend(loc="upper left")
+               
+        # ---------------------------------------------------------------------
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
@@ -285,8 +262,8 @@ class CustomCallback(Callback):
         
 def train(
         imgs, msks,
+        backbone="resnet18", # resnet 18, 34, 50, 101 or 152 
         epochs=50,
-        backbone="resnet18", # resnet 18, 34, 50, 101 or 152
         batch_size=32,
         validation_split=0.2,
         learning_rate=0.001,
@@ -325,15 +302,7 @@ def train(
         )
     callbacks = [
         EarlyStopping(patience=patience, monitor='val_loss'),
-        model_checkpoint_callback, CustomCallback(
-            epochs, 
-            backbone, 
-            batch_size, 
-            validation_split, 
-            learning_rate, 
-            patience,
-            path,
-            ),
+        model_checkpoint_callback, CustomCallback(epochs),
         ]
     
     # Train model -------------------------------------------------------------
