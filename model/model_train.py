@@ -30,10 +30,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 - Implement starting from preexisting weights
 '''
 
-#%% Inputs --------------------------------------------------------------------
-
-
-
 #%% Function: train() ---------------------------------------------------------
 
 def train(
@@ -52,7 +48,7 @@ def train(
         f"{datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss')}.h5"
         )
     
-    shape = 
+    shape = imgs.shape
     
     # Setup model -------------------------------------------------------------
    
@@ -88,6 +84,7 @@ def train(
             learning_rate, 
             patience,
             name,
+            
             ),
         ]
     
