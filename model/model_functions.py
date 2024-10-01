@@ -1,6 +1,5 @@
 #%% Imports -------------------------------------------------------------------
 
-import os
 import warnings
 import numpy as np
 from skimage import io
@@ -99,8 +98,6 @@ def preprocess(
     return imgs, msks
 
 #%% Function: augment() -------------------------------------------------------
-
-os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'
 
 def augment(imgs, msks, iterations):
         

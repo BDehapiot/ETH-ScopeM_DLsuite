@@ -23,102 +23,124 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 #%% Comments ------------------------------------------------------------------
 
 '''
+- Make augmentation optional
 - Save model weights & associated data in dedicated folders (gitignore also)
-- Set live update (log & plot see chatGPT)
 - Add support for multi-labels semantic segmentation (multi-class training)
-- Make a wrapper function for the full process 
 - Implement starting from preexisting weights
 '''
 
-#%% Function: train() ---------------------------------------------------------
+#%% Class: Train() ------------------------------------------------------------
 
-def train(
-        imgs, msks,
-        epochs=50,
-        backbone="resnet18", # resnet 18, 34, 50, 101 or 152
-        batch_size=32,
-        validation_split=0.2,
-        learning_rate=0.001,
-        patience=20,
-        ):
+class Train:
     
-    name = (
-        f"model-weights_"
-        f"mask{msk_suffix}-{msk_type}_{patch_size}_"
-        f"{datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss')}.h5"
-        )
-    
-    shape = imgs.shape
-    
-    # Setup model -------------------------------------------------------------
-   
-    model = sm.Unet(
-        backbone, 
-        input_shape=(None, None, 1), 
-        classes=1, 
-        activation="sigmoid", 
-        encoder_weights=None,
-        )
-    model.compile(
-        optimizer=Adam(learning_rate=learning_rate),
-        loss="binary_crossentropy", 
-        metrics=["mse"],
-        )
-    
-    # Checkpoints & callbacks -------------------------------------------------
-    
-    model_checkpoint_callback = ModelCheckpoint(
-        filepath=name,
-        save_weights_only=True,
-        monitor="val_loss",
-        mode="min",
-        save_best_only=True
-        )
-    callbacks = [
-        EarlyStopping(patience=patience, monitor='val_loss'),
-        model_checkpoint_callback, CustomCallback(
-            epochs, 
-            backbone, 
-            batch_size, 
-            validation_split, 
-            learning_rate, 
-            patience,
-            name,
-            ),
-        ]
-    
-    # Train model -------------------------------------------------------------
-    
-    history = model.fit(
-        x=imgs, y=msks,
-        validation_split=validation_split,
-        batch_size=batch_size,
-        epochs=epochs,
-        callbacks=callbacks,
-        verbose=0,
-        )
-    
-    # Plot & save -------------------------------------------------------------
-    
-    # loss = history.history['loss']
-    # val_loss = history.history['val_loss']
-    # epochs = range(1, len(loss) + 1)
-    # plt.plot(epochs, loss, 'y', label='Training loss')
-    # plt.plot(epochs, val_loss, 'r', label='Validation loss')
-    # plt.title('Training and validation loss')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('Loss')
-    # plt.legend()
-    # plt.show()
+    def __init__(
+            self, 
+            path,
+            msk_suffix="",
+            msk_type="normal",
+            img_norm="global",
+            patch_size=128,
+            patch_overlap=32,
+            iterations=100,
+            backbone="resnet18",
+            epochs=50,
+            batch_size=32,
+            validation_split=0.2,
+            learning_rate=0.001,
+            patience=20,
+            ):
+        
+        self.path = path
+        self.msk_suffix = msk_suffix
+        self.msk_type = msk_type
+        self.img_norm = img_norm
+        self.patch_size = patch_size
+        self.patch_overlap = patch_overlap
+        self.iterations = iterations
+        self.backbone = backbone
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.validation_split = validation_split
+        self.learning_rate = learning_rate
+        self.patience = patience
+                
+        # Preprocess
+        self.imgs, self.msks = preprocess(
+            self.path,
+            msk_suffix=self.msk_suffix, 
+            msk_type=self.msk_type, 
+            img_norm=self.img_norm,
+            patch_size=self.patch_size, 
+            patch_overlap=self.patch_overlap,
+            )
+        
+        # Augment
+        self.imgs, self.msks = augment(
+            self.imgs, self.msks, self.iterations,
+            )
 
-    # train_data = pd.DataFrame(history.history)
-    # train_data = train_data.round(5)
-    # train_data.index.name = 'Epoch'
-    # train_data.to_csv(name.replace(".h5", ".csv"))
+        # Train
+        self.setup()
+        self.train()
+        
+    # -------------------------------------------------------------------------
+        
+    def setup(self):
+        
+        # Model
+        
+        self.model = sm.Unet(
+            self.backbone, 
+            input_shape=(None, None, 1), 
+            classes=1, 
+            activation="sigmoid", 
+            encoder_weights=None,
+            )
+        
+        self.model.compile(
+            optimizer=Adam(learning_rate=self.learning_rate),
+            loss="binary_crossentropy", 
+            metrics=["mse"],
+            )
+        
+        # Checkpoint
+        self.checkpoint = ModelCheckpoint(
+            filepath=self.model_name,
+            save_weights_only=True,
+            monitor="val_loss",
+            mode="min",
+            save_best_only=True
+            )
+        
+        # Callbacks
+        self.callbacks = [
+            EarlyStopping(patience=self.patience, monitor='val_loss'),
+            self.checkpoint, CustomCallback(
+                self.epochs, 
+                self.backbone, 
+                self.batch_size, 
+                self.validation_split, 
+                self.learning_rate, 
+                self.patience,
+                self.model_name,
+                ),
+            ]
+    
+    def train(self):
+        
+        self.history = self.model.fit(
+            x=self.imgs, y=self.msks,
+            validation_split=self.validation_split,
+            batch_size=self.batch_size,
+            epochs=self.epochs,
+            callbacks=self.callbacks,
+            verbose=0,
+            ) 
 
-#%% Class: CustomCallback() ---------------------------------------------------
+#%% Class: CustomCallback
 
 class CustomCallback(Callback):
+    
     def __init__(
             self, 
             epochs, 
@@ -127,7 +149,7 @@ class CustomCallback(Callback):
             validation_split, 
             learning_rate, 
             patience,
-            name,
+            model_name,
             ):
         
         super(CustomCallback, self).__init__()
@@ -137,7 +159,7 @@ class CustomCallback(Callback):
         self.validation_split = validation_split
         self.learning_rate = learning_rate
         self.patience = patience
-        self.name = name
+        self.model_name = model_name
         self.trn_loss = []
         self.val_loss = []
         self.trn_mse = []
@@ -145,7 +167,7 @@ class CustomCallback(Callback):
         
         # Initialize plot
         self.fig, self.ax = plt.subplots(figsize=(12, 8))
-        self.fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.4)
+        self.fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.3)
         self.axsub = None
         
         plt.rcParams["font.family"] = "Consolas"
@@ -246,8 +268,8 @@ class CustomCallback(Callback):
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        plt.pause(0.1)
-        
+        plt.pause(0.1)  
+    
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -288,17 +310,5 @@ if __name__ == "__main__":
     # viewer.add_image(imgs)
     # viewer.add_image(msks)
     
-    t0 = time.time()
-    train(        
-        imgs, msks,
-        backbone="resnet18", # ResNet 18, 34, 50, 101 or 152 
-        epochs=50,
-        batch_size=32,
-        validation_split=0.2,
-        learning_rate=0.001,
-        patience=20,
-        )
-    t1 = time.time()
-    print(f"train() : {t1-t0:.5f}")
-  
-    
+    # Train()
+    train = Train(imgs, msks)
