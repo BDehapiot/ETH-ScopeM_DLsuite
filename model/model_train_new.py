@@ -144,9 +144,18 @@ class Train:
             ) 
         
     def save(self):      
+               
+        # History
+        self.history_df = pd.DataFrame(self.history.history)
+        self.history_df = self.history_df.round(5)
+        self.history_df.index.name = 'Epoch'
+        self.history_df.to_csv(Path(self.save_path, "history.csv"))
         
-        #
-        self.metadata = {
+        # Report
+        idx = np.argmin(self.history.history["val_loss"])
+        self.report = {
+            ""
+            # Preprocess
             "train_path"       : self.train_path,
             "msk_suffix"       : self.msk_suffix,
             "msk_type"         : self.msk_type,
@@ -154,23 +163,27 @@ class Train:
             "patch_size"       : self.patch_size,
             "patch_overlap"    : self.patch_overlap,
             "nAugment"         : self.nAugment,
+            
+            # Train
             "backbone"         : self.backbone,
             "epochs"           : self.epochs,
             "batch_size"       : self.batch_size,
             "validation_split" : self.validation_split,
             "learning_rate"    : self.learning_rate,
             "patience"         : self.patience,
+            
+            # Results
+            "trn_loss"         : self.history.history["loss"][idx],
+            "val_loss"         : self.history.history["val_loss"][idx], 
+            "trn_mse"          : self.history.history["mse"][idx],
+            "val_mse"          : self.history.history["val_mse"][idx],
+            
+            
             }       
         
-        self.metadata = pd.DataFrame(self.metadata)
-        self.metadata.to_csv(Path(self.save_path, "metadata.csv"))
-        
-        # History
-        self.history_df = pd.DataFrame(self.history.history)
-        self.history_df = self.history_df.round(5)
-        self.history_df.index.name = 'Epoch'
-        self.history_df.to_csv(Path(self.save_path, "history.csv"))
-        
+        with open(str(Path(self.save_path, "report.txt")), "w") as f:
+            for key, value in self.report.items():
+                f.write(f"{key}: {value}\n")
 
 #%% Class: CustomCallback
 
@@ -209,7 +222,8 @@ class CustomCallback(Callback):
         self.ax.set_title(f"{self.train.name}")
         self.ax.set_xlabel("epochs")
         self.ax.set_ylabel("loss")
-        self.ax.legend(loc="upper right", bbox_to_anchor=(1, -0.1), borderaxespad=0.)
+        self.ax.legend(
+            loc="upper right", bbox_to_anchor=(1, -0.1), borderaxespad=0.)
                 
         # Subplot -------------------------------------------------------------
         
@@ -227,9 +241,6 @@ class CustomCallback(Callback):
         self.axsub.set_ylim(0, 0.2)
                        
         # Info ----------------------------------------------------------------
-
-        self.vloss_best = np.min(self.val_loss)
-        self.epoch_best = np.argmin(self.val_loss)
         
         info_parameters = (
             
@@ -251,10 +262,10 @@ class CustomCallback(Callback):
             f"----------\n"
             f"epoch    : {epoch + 1}/{self.train.epochs}\n"
             f"trn_loss : {logs['loss']:.4f}\n"
-            f"val_loss : {logs['val_loss']:.4f} ({self.vloss_best:.4f})\n"
+            f"val_loss : {logs['val_loss']:.4f} ({np.min(self.val_loss):.4f})\n"
             f"trn_mse  : {logs['loss']:.4f}\n"
             f"val_mse  : {logs['val_loss']:.4f}\n"
-            f"patience : {epoch - self.epoch_best}/{self.train.patience}\n"
+            f"patience : {epoch - np.argmin(self.val_loss)}/{self.train.patience}\n"
             
             )
         
@@ -302,37 +313,12 @@ if __name__ == "__main__":
     
     imgs = train.imgs
     msks = train.msks
+    history_df = train.history_df
+    history = train.history.history
+    
+    idx = np.argmin(history["val_loss"])
     
     # import napari
     # viewer = napari.Viewer()
     # viewer.add_image(imgs)
     # viewer.add_image(msks)
-    
-#%%
-
-metadata = {
-    "train_path"       : train.path,
-    "msk_suffix"       : train.msk_suffix,
-    "msk_type"         : train.msk_type,
-    "img_norm"         : train.img_norm,
-    "patch_size"       : train.patch_size,
-    "patch_overlap"    : train.patch_overlap,
-    "nAugment"         : train.nAugment,
-    "backbone"         : train.backbone,
-    "epochs"           : train.epochs,
-    "batch_size"       : train.batch_size,
-    "validation_split" : train.validation_split,
-    "learning_rate"    : train.learning_rate,
-    "patience"         : train.patience,
-    }       
-
-# metadata = pd.DataFrame(list(metadata.items()), columns=['Key', 'Value'])
-# metadata.set_index('Key', inplace=True)
-# metadata.to_csv(Path(Path.cwd(), "metadata.csv"))
-
-with open('metadata.txt', 'w') as f:
-    for key, value in metadata.items():
-        f.write(f"{key}: {value}\n")
-
-# metadata = pd.DataFrame(metadata, index=False)
-# self.metadata.to_csv(Path(self.save_path, "metadata.csv"))
