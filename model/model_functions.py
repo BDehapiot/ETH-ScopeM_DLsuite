@@ -129,3 +129,19 @@ def augment(imgs, msks, iterations):
     msks = np.stack([data[1] for data in outputs])
     
     return imgs, msks
+
+#%% Function: split() ---------------------------------------------------------
+
+def split(imgs, msks, validation_split=0.2):
+    n = len(imgs)
+    val_n = int(n * validation_split)
+    trn_n = n - val_n
+    idx = np.arange(n)
+    np.random.shuffle(idx)
+    trn_idx = idx[:trn_n]
+    val_idx = idx[trn_n:]
+    trn_imgs = imgs[trn_idx]
+    trn_msks = msks[trn_idx]
+    val_imgs = imgs[val_idx]
+    val_msks = msks[val_idx]
+    return trn_imgs, trn_msks, val_imgs, val_msks

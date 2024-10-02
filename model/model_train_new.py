@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import segmentation_models as sm
 
 # Functions
-from model_functions import preprocess, augment
+from model_functions import preprocess, augment, split
 
 # Tensorflow
 from tensorflow.keras.optimizers import Adam
@@ -25,13 +25,26 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 #%% Comments ------------------------------------------------------------------
 
 '''
-- Dynamic vertical axis for inset plot (last n data points)
-- Save model weights & associated data in dedicated folders (gitignore also)
+Current:
+- Manual validation split to show predictions on validation data
+    - instead of creating trn_imgs and val_imgs... create indexes and pass it to model.fit
+'''
+
+'''
+To Do:
+- Add number of raw images inputed in training in the report 
+- Manual validation split to show predictions on validation data
 - Add support for multi-labels semantic segmentation (multi-class training)
 - Multi-channel image support (RGB...)
 - Implement starting from preexisting weights
-- Manual validation split to show predictions on validation data
 '''
+
+'''
+To improve:
+- Save model weights & associated data in dedicated folders (gitignore also)
+- Dynamic vertical axis for inset plot (last n data points)
+'''
+
 
 #%% Class: Train() ------------------------------------------------------------
 
@@ -91,10 +104,15 @@ class Train:
             self.imgs, self.msks = augment(
                 self.imgs, self.msks, self.nAugment,
                 )
+            
+        # split
+        self.trn_imgs, self.trn_msks, self.val_imgs, self.val_msks = split(
+            self.imgs, self.msks, validation_split=self.validation_split)
 
         # Train
         self.setup()
         self.train()
+        self.predict()
         self.save()
         
     # Train -------------------------------------------------------------------
@@ -135,13 +153,16 @@ class Train:
     def train(self):
         
         self.history = self.model.fit(
-            x=self.imgs, y=self.msks,
-            validation_split=self.validation_split,
+            x=self.trn_imgs, y=self.trn_msks,
+            validation_data=(self.val_imgs, self.val_msks),
             batch_size=self.batch_size,
             epochs=self.epochs,
             callbacks=self.callbacks,
             verbose=0,
             ) 
+        
+    def predict(self):
+        self.val_probs = self.model.predict(self.val_imgs).squeeze()
         
     def save(self):      
                
@@ -154,7 +175,7 @@ class Train:
         # Report
         idx = np.argmin(self.history.history["val_loss"])
         self.report = {
-            ""
+            
             # Preprocess
             "train_path"       : self.train_path,
             "msk_suffix"       : self.msk_suffix,
@@ -173,17 +194,17 @@ class Train:
             "patience"         : self.patience,
             
             # Results
-            "trn_loss"         : self.history.history["loss"][idx],
-            "val_loss"         : self.history.history["val_loss"][idx], 
-            "trn_mse"          : self.history.history["mse"][idx],
-            "val_mse"          : self.history.history["val_mse"][idx],
-            
+            "best_epoch"       : idx,
+            "best_val_loss"    : self.history.history["val_loss"][idx], 
             
             }       
         
         with open(str(Path(self.save_path, "report.txt")), "w") as f:
             for key, value in self.report.items():
-                f.write(f"{key}: {value}\n")
+                if isinstance(value, float):
+                    f.write(f"{key}: {value:.4f}\n")
+                else:
+                    f.write(f"{key}: {value}\n")
 
 #%% Class: CustomCallback
 
@@ -238,7 +259,14 @@ class CustomCallback(Callback):
             range(1, epoch + 2), self.val_loss, "r", label="validation loss")
         self.axsub.set_xlabel("epochs")
         self.axsub.set_ylabel("loss")
-        self.axsub.set_ylim(0, 0.2)
+        
+        # Dynamic y axis
+        n = 10
+        if len(self.val_loss) < n: 
+            y_max = np.max(self.val_loss)
+        else:
+            y_max = np.max(self.val_loss[-n:])
+        self.axsub.set_ylim(0, y_max * 1.2)
                        
         # Info ----------------------------------------------------------------
         
@@ -302,23 +330,31 @@ if __name__ == "__main__":
         img_norm="global",
         patch_size=128,
         patch_overlap=32,
-        nAugment=100,
+        nAugment=1000,
         backbone="resnet18",
-        epochs=50,
+        epochs=200,
         batch_size=32,
         validation_split=0.2,
         learning_rate=0.001,
         patience=20,
         )
     
-    imgs = train.imgs
-    msks = train.msks
-    history_df = train.history_df
-    history = train.history.history
-    
-    idx = np.argmin(history["val_loss"])
+    val_imgs = train.val_imgs
+    val_msks = train.val_msks
+    val_probs = train.val_probs
+    val_std = np.std(np.stack((val_msks, val_probs), axis=0), axis=0)
     
     # import napari
     # viewer = napari.Viewer()
     # viewer.add_image(imgs)
     # viewer.add_image(msks)
+    
+    import napari
+    viewer = napari.Viewer()
+    viewer.add_image(val_imgs)
+    viewer.add_image(val_msks)
+    viewer.add_image(val_probs)
+    viewer.add_image(val_std)
+    
+#%%
+
