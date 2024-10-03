@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import segmentation_models as sm
 
 # Functions
-from model_functions import preprocess, augment, split
+from model_functions import preprocess, augment, split_idx
 
 # Tensorflow
 from tensorflow.keras.optimizers import Adam
@@ -26,25 +26,21 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 '''
 Current:
-- Manual validation split to show predictions on validation data
-    - instead of creating trn_imgs and val_imgs... create indexes and pass it to model.fit
+- Set the get_display() function to show/save val_imgs predictions
 '''
 
 '''
 To Do:
-- Add number of raw images inputed in training in the report 
-- Manual validation split to show predictions on validation data
-- Add support for multi-labels semantic segmentation (multi-class training)
-- Multi-channel image support (RGB...)
-- Implement starting from preexisting weights
+- Synchronise the graph and report displayed info
+- AMulti-labels semantic segmentation (multi-class training)
+- Multi-channel segmentation (RGB...)
+- Starting from pre-existing weights
 '''
 
 '''
 To improve:
-- Save model weights & associated data in dedicated folders (gitignore also)
-- Dynamic vertical axis for inset plot (last n data points)
+- Save model weights, reports, test images... in dedicated folders 
 '''
-
 
 #%% Class: Train() ------------------------------------------------------------
 
@@ -99,20 +95,20 @@ class Train:
         self.nImg = self.imgs.shape[0]
         
         # Augment
-        os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'
+        os.environ['NO_ALBUMENTATIONS_UPDATE'] = "1"
         if self.nAugment > 0:
             self.imgs, self.msks = augment(
                 self.imgs, self.msks, self.nAugment,
                 )
             
-        # split
-        self.trn_imgs, self.trn_msks, self.val_imgs, self.val_msks = split(
-            self.imgs, self.msks, validation_split=self.validation_split)
+        # Split indexes
+        self.trn_idx, self.val_idx = split_idx(
+            self.imgs.shape[0], validation_split=self.validation_split) 
 
         # Train
         self.setup()
         self.train()
-        self.predict()
+        # self.predict()
         self.save()
         
     # Train -------------------------------------------------------------------
@@ -153,19 +149,35 @@ class Train:
     def train(self):
         
         self.history = self.model.fit(
-            x=self.trn_imgs, y=self.trn_msks,
-            validation_data=(self.val_imgs, self.val_msks),
+            x=self.imgs[self.trn_idx], 
+            y=self.msks[self.trn_idx],
+            validation_data=(
+                self.imgs[self.val_idx],
+                self.msks[self.val_idx]
+                ),
             batch_size=self.batch_size,
             epochs=self.epochs,
             callbacks=self.callbacks,
             verbose=0,
             ) 
         
-    def predict(self):
-        self.val_probs = self.model.predict(self.val_imgs).squeeze()
+    # def predict(self):
+    #     self.val_probs = self.model.predict(self.val_imgs).squeeze()
         
     def save(self):      
-               
+        
+        # # Display
+        # for i in range(10):
+        #     display = np.hstack((
+        #         self.val_imgs[i], 
+        #         self.val_msks[i],
+        #         self.val_probs[i],
+        #         ))
+        #     io.imsave(
+        #         Path(self.save_path, f"example_{i:01d}.jpg"),
+        #         display.astype("float32"), check_contrast=False
+        #         )
+
         # History
         self.history_df = pd.DataFrame(self.history.history)
         self.history_df = self.history_df.round(5)
@@ -176,7 +188,7 @@ class Train:
         idx = np.argmin(self.history.history["val_loss"])
         self.report = {
             
-            # Preprocess
+            # Prep
             "train_path"       : self.train_path,
             "msk_suffix"       : self.msk_suffix,
             "msk_type"         : self.msk_type,
@@ -329,32 +341,48 @@ if __name__ == "__main__":
         msk_type="edt",
         img_norm="global",
         patch_size=128,
-        patch_overlap=32,
-        nAugment=1000,
+        patch_overlap=16,
+        nAugment=0,
         backbone="resnet18",
-        epochs=200,
+        epochs=50,
         batch_size=32,
         validation_split=0.2,
         learning_rate=0.001,
         patience=20,
         )
     
-    val_imgs = train.val_imgs
-    val_msks = train.val_msks
-    val_probs = train.val_probs
-    val_std = np.std(np.stack((val_msks, val_probs), axis=0), axis=0)
+    model = train.model
+    imgs = train.imgs
+    msks = train.msks
+    trn_idx = train.trn_idx
+    val_idx = train.val_idx
+        
+    # val_probs = train.val_probs
     
     # import napari
     # viewer = napari.Viewer()
     # viewer.add_image(imgs)
     # viewer.add_image(msks)
     
-    import napari
-    viewer = napari.Viewer()
-    viewer.add_image(val_imgs)
-    viewer.add_image(val_msks)
-    viewer.add_image(val_probs)
-    viewer.add_image(val_std)
+    # import napari
+    # viewer = napari.Viewer()
+    # viewer.add_image(val_imgs)
+    # viewer.add_image(val_msks)
+    # viewer.add_image(val_probs)
     
 #%%
+
+def get_display(imgs, msks, model):
+    display = []
+    probs = np.stack(model.predict(imgs).squeeze())
+    for i in range(imgs.shape[0]):
+        tmp = np.hstack((imgs[i], msks[i], probs[i]))
+        display.append(tmp)
+    return display
+
+display = get_display(imgs[val_idx[:10]], msks[val_idx[:10]], model)
+        
+import napari
+viewer = napari.Viewer()
+viewer.add_image(np.stack(display))
 
