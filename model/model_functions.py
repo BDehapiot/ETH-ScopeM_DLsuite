@@ -1,9 +1,14 @@
 #%% Imports -------------------------------------------------------------------
 
+import os
 import warnings
 import numpy as np
 from skimage import io
+from pathlib import Path
+from matplotlib import cm
+os.environ['NO_ALBUMENTATIONS_UPDATE'] = "1" # Don't know if it works
 import albumentations as A
+import matplotlib.pyplot as plt
 from joblib import Parallel, delayed 
 
 # bdtools
@@ -25,8 +30,46 @@ def split_idx(n, validation_split=0.2):
     val_idx = idx[trn_n:]
     return trn_idx, val_idx
 
-def get_display():
-    pass
+def save_val_prds(imgs, msks, prds, save_path):
+
+    plt.ioff() # turn off inline plot
+    
+    for i in range(imgs.shape[0]):
+
+        # Initialize
+        fig, (ax0, ax1, ax2) = plt.subplots(
+            nrows=1, ncols=3, figsize=(15, 5))
+        cmap0, cmap1, cmap2 = cm.gray, cm.plasma, cm.plasma
+        shrink = 0.75
+
+        # Plot img
+        ax0.imshow(imgs[i], cmap=cmap0)
+        ax0.set_title("image")
+        ax0.set_xlabel("pixels")
+        ax0.set_ylabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap0), ax=ax0, shrink=shrink)
+
+        # Plot msk
+        ax1.imshow(msks[i], cmap=cmap1)
+        ax1.set_title("mask")
+        ax1.set_xlabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap1), ax=ax1, shrink=shrink)
+        
+        # Plot prd
+        ax2.imshow(prds[i], cmap=cmap2)
+        ax2.set_title("prediction")
+        ax2.set_xlabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap2), ax=ax2, shrink=shrink)
+        
+        plt.tight_layout()
+        
+        # Save
+        Path(save_path, "val_prds").mkdir(exist_ok=True)
+        plt.savefig(save_path / "val_prds" /f"expl_{i:02d}.png")
+        plt.close(fig)
 
 #%% Function: preprocess() ----------------------------------------------------
    
@@ -92,7 +135,7 @@ def preprocess(
 
     imgs, msks = open_data(train_path, msk_suffix)
 
-    if normalize == "global":
+    if img_norm == "global":
         imgs = normalize(imgs)
     
     outputs = Parallel(n_jobs=-1)(
