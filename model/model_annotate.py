@@ -24,6 +24,7 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 
 '''
 Todo
+- Manage output format for mask (uint8 or uint16)
 - Something wrong with font size in new Napari version
 - Reset view on first image?
 - RGB image support
@@ -33,7 +34,7 @@ Todo
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd().parent, "data", "train_battery")
+train_path = Path(Path.cwd().parent, "data", "train_nuclei")
 
 # Parameters
 edit = True
@@ -349,7 +350,7 @@ class Painter:
         if self.rad_instance.isChecked():
             self.solve_labels()
             self.next_free_label()
-        msk = self.viewer.layers["mask"].data
+        msk = self.viewer.layers["mask"].data.astype("uint8") # Hardcoded "uint8"
         self.update_msk_paths()
         msk_path = self.msk_paths[self.idx]
         self.msks[self.idx] = msk
@@ -457,3 +458,4 @@ class Painter:
 
 if __name__ == "__main__":
     painter = Painter(train_path, edit=edit, randomize=randomize)
+    msks = painter.msks
