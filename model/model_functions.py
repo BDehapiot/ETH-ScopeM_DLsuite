@@ -21,6 +21,18 @@ from skimage.segmentation import find_boundaries
 
 #%% Functions: ----------------------------------------------------------------
 
+def open_data(train_path, msk_suffix):
+    imgs, msks = [], []
+    tag = f"_mask{msk_suffix}"
+    for path in train_path.iterdir():
+        if tag in path.stem:
+            img_name = path.name.replace(tag, "")
+            imgs.append(io.imread(path.parent / img_name))
+            msks.append(io.imread(path))
+    imgs = np.stack(imgs)
+    msks = np.stack(msks)
+    return imgs, msks
+
 def split_idx(n, validation_split=0.2):
     val_n = int(n * validation_split)
     trn_n = n - val_n
@@ -68,14 +80,13 @@ def save_val_prds(imgs, msks, prds, save_path):
         
         # Save
         Path(save_path, "val_prds").mkdir(exist_ok=True)
-        plt.savefig(save_path / "val_prds" /f"expl_{i:02d}.png")
+        plt.savefig(save_path / "val_prds" / f"expl_{i:02d}.png")
         plt.close(fig)
 
 #%% Function: preprocess() ----------------------------------------------------
    
 def preprocess(
-        train_path, 
-        msk_suffix="", 
+        imgs, msks=None, 
         msk_type="normal", 
         img_norm="global",
         patch_size=0, 
@@ -97,63 +108,67 @@ def preprocess(
             )
     
     # Nested function(s) ------------------------------------------------------
-    
-    def open_data(train_path, msk_suffix):
-        imgs, msks = [], []
-        tag = f"_mask{msk_suffix}"
-        for path in train_path.iterdir():
-            if tag in path.stem:
-                img_name = path.name.replace(tag, "")
-                imgs.append(io.imread(path.parent / img_name))
-                msks.append(io.imread(path))
-        imgs = np.stack(imgs)
-        msks = np.stack(msks)
-        return imgs, msks
-    
+
     def normalize(arr, pct_low=0.01, pct_high=99.99):
-        return norm_pct(norm_gcn(arr)) 
+        return norm_gcn(norm_pct(arr, pct_low=pct_low, pct_high=pct_high))
     
-    def _preprocess(img, msk):
+    def _preprocess(img, msk=None):
                 
         if img_norm == "image":
             img = normalize(img)
         
-        if msk_type == "normal":
-            msk = msk > 0
-        elif msk_type == "edt":
-            msk = get_edt(msk, normalize="object", parallel=False)
-        elif msk_type == "bounds":
-            msk = find_boundaries(msk)           
+        if msk is not None:
+            if msk_type == "normal":
+                msk = msk > 0
+            elif msk_type == "edt":
+                msk = get_edt(msk, normalize="object", parallel=False)
+            elif msk_type == "bounds":
+                msk = find_boundaries(msk)           
 
+            if patch_size > 0:
+                msk = extract_patches(msk, patch_size, patch_overlap)
+        
         if patch_size > 0:
             img = extract_patches(img, patch_size, patch_overlap)
-            msk = extract_patches(msk, patch_size, patch_overlap)
 
         return img, msk
         
     # Execute -----------------------------------------------------------------
 
-    imgs, msks = open_data(train_path, msk_suffix)
-
     if img_norm == "global":
         imgs = normalize(imgs)
     
-    outputs = Parallel(n_jobs=-1)(
-        delayed(_preprocess)(img, msk)
-        for img, msk in zip(imgs, msks)
-        )    
-    imgs = np.stack([data[0] for data in outputs])
-    msks = np.stack([data[1] for data in outputs])
+    if msks is not None:
+        outputs = Parallel(n_jobs=-1)(
+            delayed(_preprocess)(img, msk)
+            for img, msk in zip(imgs, msks)
+            )
+        imgs = np.stack([data[0] for data in outputs])
+        msks = np.stack([data[1] for data in outputs])
+        
+        if patch_size > 0:
+            imgs = np.stack([arr for sublist in imgs for arr in sublist])
+            msks = np.stack([arr for sublist in msks for arr in sublist])
+        
+        imgs = imgs.astype("float32")
+        msks = msks.astype("float32")
+        
+        return imgs, msks
     
-    if patch_size > 0:
-        imgs = np.stack([arr for sublist in imgs for arr in sublist])
-        msks = np.stack([arr for sublist in msks for arr in sublist])
+    else:
+        outputs = Parallel(n_jobs=-1)(
+            delayed(_preprocess)(img)
+            for img in imgs
+            )
+        imgs = np.stack([data[0] for data in outputs])
+        
+        if patch_size > 0:
+            imgs = np.stack([arr for sublist in imgs for arr in sublist])
+        
+        imgs = imgs.astype("float32")
+        
+        return imgs
     
-    imgs = imgs.astype("float32")
-    msks = msks.astype("float32")
-    
-    return imgs, msks
-
 #%% Function: augment() -------------------------------------------------------
 
 def augment(imgs, msks, iterations):

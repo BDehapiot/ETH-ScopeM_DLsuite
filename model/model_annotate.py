@@ -25,7 +25,7 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 '''
 Todo
 - Manage output format for mask (uint8 or uint16)
-- Something wrong with font size in new Napari version
+- Something wrong with font size in Napari (probably due to last pyqt version)
 - Reset view on first image?
 - RGB image support
 - Parameter handling (default, autosaved etc)
@@ -400,16 +400,17 @@ class Painter:
         img_name = shorten_filename(img_name, max_length=32)
         msk_name = shorten_filename(msk_name, max_length=32)
 
+        font_size = 12
         # Set styles (Titles)
-        style0 = set_style("White", 10, "normal", "underline")
+        style0 = set_style("White", font_size, "normal", "underline")
         # Set styles (Filenames)
-        style1 = set_style("Khaki", 10, "normal", "none")
+        style1 = set_style("Khaki", font_size, "normal", "none")
         # Set styles (Legend)
-        style2 = set_style("LightGray", 10, "normal", "none")
+        style2 = set_style("LightGray", font_size, "normal", "none")
         # Set styles (Values)
-        style3 = set_style("LightSteelBlue", 10, "normal", "none")
+        style3 = set_style("LightSteelBlue", font_size, "normal", "none")
         # Set styles (Shortcuts)
-        style4 = set_style("BurlyWood", 10, "normal", "none")
+        style4 = set_style("BurlyWood", font_size, "normal", "none")
         spacer = "&nbsp;"
 
         self.info_image.setText(

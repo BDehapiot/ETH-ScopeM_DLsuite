@@ -1,0 +1,18 @@
+name: model_normal
+date: 2024-10-07_17h25m14s
+path: c:\users\bdeha\projects\eth-scopem_dlsuite\data\train_calcium
+msk_suffix: 
+msk_type: normal
+img_norm: global
+patch_size: 128
+patch_overlap: 32
+img/patches: 72
+augmentation: 500
+backbone: resnet18
+epochs: 200
+batch_size: 32
+validation_split: 0.2000
+learning_rate: 0.0005
+patience: 20
+best_epoch: 28
+best_val_loss: 0.0744
