@@ -1,6 +1,7 @@
 #%% Imports -------------------------------------------------------------------
 
 import os
+import pickle
 import warnings
 import numpy as np
 from skimage import io
@@ -9,12 +10,13 @@ from matplotlib import cm
 os.environ['NO_ALBUMENTATIONS_UPDATE'] = "1" # Don't know if it works
 import albumentations as A
 import matplotlib.pyplot as plt
+import segmentation_models as sm
 from joblib import Parallel, delayed 
 
 # bdtools
 from bdtools.mask import get_edt
 from bdtools.norm import norm_gcn, norm_pct
-from bdtools.patch import extract_patches
+from bdtools.patch import extract_patches, merge_patches
 
 # Skimage
 from skimage.segmentation import find_boundaries 
@@ -201,3 +203,57 @@ def augment(imgs, msks, iterations):
     msks = np.stack([data[1] for data in outputs])
     
     return imgs, msks
+
+#%% Function: predict() -------------------------------------------------------
+
+'''
+- Predict data larger than VRAM
+'''
+
+def predict(
+        imgs, 
+        model_path, 
+        img_norm="global",
+        patch_overlap=0,
+        ):
+
+    valid_norms = ["none", "global", "image"]
+    if img_norm not in valid_norms:
+        raise ValueError(
+            f"Invalid value for img_norm: '{img_norm}'."
+            f" Expected one of {valid_norms}."
+            )
+        
+    # Nested function(s) ------------------------------------------------------
+        
+    # Execute -----------------------------------------------------------------
+    
+    # Load report
+    with open(str(model_path / "report.pkl"), "rb") as f:
+        report = pickle.load(f)
+    
+    # Load model
+    model = sm.Unet(
+        report["backbone"], 
+        input_shape=(None, None, 1), 
+        classes=1, 
+        activation="sigmoid", 
+        encoder_weights=None,
+        )
+    
+    # Load weights
+    model.load_weights(model_path / "weights.h5") 
+       
+    # Preprocess
+    patches = preprocess(
+        imgs, msks=None, 
+        img_norm=img_norm,
+        patch_size=report["patch_size"], 
+        patch_overlap=patch_overlap,
+        )
+
+    # Predict
+    prds = model.predict(patches).squeeze()
+    prds = merge_patches(prds, imgs.shape, patch_overlap)
+    
+    return prds

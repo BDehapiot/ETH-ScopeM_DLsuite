@@ -14,6 +14,10 @@ from bdtools.patch import merge_patches
 
 #%% Comments ------------------------------------------------------------------
 
+'''
+- Predict larger than VRAM 
+'''
+
 #%% Function: predict() -------------------------------------------------------
 
 def predict(
@@ -71,7 +75,7 @@ if __name__ == "__main__":
     # Paths
     model_path = Path.cwd() / "model_normal"
     # imgs_path = Path.cwd().parent / "data" / "Exp1_rf-0.1_rstack_1000-1199.tif"
-    imgs_path = Path.cwd().parent / "data" / "Exp2_rf-0.1_rstack.tif"
+    imgs_path = Path.cwd().parent / "data" / "Exp2_rf-0.1_rstack_1000-1199.tif"
     
     # Open data
     imgs = io.imread(imgs_path)
