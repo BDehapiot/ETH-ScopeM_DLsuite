@@ -95,6 +95,47 @@ def preprocess(
         patch_overlap=0,
         ):
     
+    """ 
+    Preprocess images and masks for training or prediction procedures.
+    
+    If msks=None, only images will be preprocessed.
+    If patch_size != 0, images and masks will be splitted into patches.
+    
+    Parameters
+    ----------
+    imgs : 3D ndarray (int or float)
+        Inputs images, stacked along the first dimension. 
+        
+    msks : 3D ndarray (bool or int), optional, default=None 
+        Inputs masks, stacked along the first dimension. 
+        If None, only images will be preprocessed.
+        
+    msk_type : str, default="normal"
+        - "normal" : No changes.
+        - "edt"    : Euclidean distance transform of binary/labeled objects.
+        - "bounds" : Boundaries of binary/labeled objects.
+    
+    img_norm : str, default="global"
+        - "none"   : No changes.
+        - "global" : 0 to 1 normalization considering the full stack.
+        - "image"  : 0 to 1 normalization per image.
+    
+    patch_size : int, default=0
+        If != 0, size of extracted patches.
+    
+    patch_overlap : int, default=0
+        Overlap between patches (Must be between 0 and size - 1).
+        
+    Returns
+    -------  
+    imgs : 3D ndarray (float32)
+        Preprocessed images.
+        
+    msks : 3D ndarray (float32), optional
+        Preprocessed masks.
+        
+    """
+    
     valid_types = ["normal", "edt", "bounds"]
     if msk_type not in valid_types:
         raise ValueError(
@@ -141,6 +182,7 @@ def preprocess(
         imgs = normalize(imgs)
     
     if msks is not None:
+        
         outputs = Parallel(n_jobs=-1)(
             delayed(_preprocess)(img, msk)
             for img, msk in zip(imgs, msks)
@@ -158,6 +200,7 @@ def preprocess(
         return imgs, msks
     
     else:
+        
         outputs = Parallel(n_jobs=-1)(
             delayed(_preprocess)(img)
             for img in imgs
