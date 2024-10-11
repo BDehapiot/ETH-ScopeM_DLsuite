@@ -1,12 +1,14 @@
 #%% Imports -------------------------------------------------------------------
 
 import sys
+import shutil
 import pytest
 import numpy as np
+from skimage import io
 from pathlib import Path
 
 # model_function
-from .model.model_functions import preprocess
+from bdmodel.functions import preprocess
 
 # bdtools
 from bdtools.norm import norm_pct
@@ -125,7 +127,8 @@ def random_data(
 
 #%% Test cases ----------------------------------------------------------------
 
-params = []
+params_random_data = []
+params_preprocess = []
 for i in range(10):
     
     # random_data() parameters
@@ -136,16 +139,82 @@ for i in range(10):
     nObj = np.random.randint(0, 16)
     min_radius = np.random.randint(8, 16)
     max_radius = round(min_radius * np.random.uniform(1.1, 3))
-    img_noise = round(np.random.uniform(0.1, 1.0), 3)
+    img_noise = round(np.random.uniform(0.5, 1.0), 3)
     img_dtype = str(np.random.choice(["uint8", "uint16", "float32"]))
     msk_dtype = str(np.random.choice(["uint8", "uint16", "float32", "bool"]))
 
-    # preprocess() parameters
-    
-
-    params.append((
+    # # preprocess() parameters
+    # msk_type = str(np.random.choice(["normal", "edt", "bounds"]))
+    # img_norm = str(np.random.choice(["none", "global", "image"]))
+    # patch_size = np.random.choice([0, np.random.randint(16, 64)])
+    # if patch_size == 0:
+    #     patch_overlap = 0 
+    # else:
+    #     patch_overlap = np.random.choice(
+    #         [0, np.random.randint(8, patch_size - 1)])
+            
+    params_random_data.append((
         nData,
         nZ, nY, nX,
         nObj, min_radius, max_radius,
         img_noise, img_dtype, msk_dtype,
         )) 
+    
+    # params_preprocess.append((
+    #     img_norm, msk_type,
+    #     patch_size, patch_overlap,
+    #     )) 
+    
+#%% Tests ---------------------------------------------------------------------
+   
+# Generate random data 
+for i, param in enumerate(params_random_data):
+    imgs, msks = random_data(        
+        nData,
+        nZ, nY, nX, 
+        nObj, min_radius, max_radius,
+        img_noise, img_dtype, msk_dtype,
+        )
+
+# @pytest.mark.parametrize(
+#     "nData, "
+#     "nZ, nY, nX, "
+#     "nObj, min_radius, max_radius, "
+#     "img_noise, img_dtype, msk_dtype, ",
+#     params_random_data
+#     )
+
+# def test_random_data(
+#         nData,
+#         nZ, nY, nX,
+#         nObj, min_radius, max_radius,
+#         img_noise, img_dtype, msk_dtype,
+#         ):
+    
+#     # Genrate random data
+#     imgs, msks = random_data(        
+#         nData,
+#         nZ, nY, nX, 
+#         nObj, min_radius, max_radius,
+#         img_noise, img_dtype, msk_dtype,
+#         )
+    
+#     # Save
+#     train_path = Path.cwd() / "train"
+#     if train_path.exists():
+#         shutil.rmtree(train_path)
+#     train_path.mkdir(exist_ok=True)
+#     for i, (img, msk) in enumerate(zip(imgs, msks)):
+#         io.imsave(
+#             train_path / f"img_{i:02d}.tif",
+#             img, check_contrast=False,
+#             )
+#         io.imsave(
+#             train_path / f"msk_{i:02d}.tif",
+#             msk, check_contrast=False,
+#             )
+        
+#%% Execute -------------------------------------------------------------------
+
+if __name__ == "__main__":
+    pytest.main([__file__])

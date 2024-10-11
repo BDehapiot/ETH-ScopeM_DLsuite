@@ -7,7 +7,7 @@ from pathlib import Path
 import segmentation_models as sm
 
 # Functions
-from model_functions import preprocess
+from bdmodel.functions import preprocess
 
 # bdtools
 from bdtools.patch import merge_patches

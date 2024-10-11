@@ -88,9 +88,9 @@ def save_val_prds(imgs, msks, prds, save_path):
 #%% Function: preprocess() ----------------------------------------------------
    
 def preprocess(
-        imgs, msks=None, 
-        msk_type="normal", 
+        imgs, msks=None,
         img_norm="global",
+        msk_type="normal", 
         patch_size=0, 
         patch_overlap=0,
         ):
@@ -110,16 +110,16 @@ def preprocess(
         Inputs masks, stacked along the first dimension. 
         If None, only images will be preprocessed.
         
-    msk_type : str, default="normal"
-        - "normal" : No changes.
-        - "edt"    : Euclidean distance transform of binary/labeled objects.
-        - "bounds" : Boundaries of binary/labeled objects.
-    
     img_norm : str, default="global"
         - "none"   : No changes.
         - "global" : 0 to 1 normalization considering the full stack.
         - "image"  : 0 to 1 normalization per image.
-    
+        
+    msk_type : str, default="normal"
+        - "normal" : No changes.
+        - "edt"    : Euclidean distance transform of binary/labeled objects.
+        - "bounds" : Boundaries of binary/labeled objects.
+
     patch_size : int, default=0
         If != 0, size of extracted patches.
     

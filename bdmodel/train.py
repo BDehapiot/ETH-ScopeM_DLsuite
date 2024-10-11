@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import segmentation_models as sm
 
 # Functions
-from model_functions import (
+from bdmodel.functions import (
     open_data, preprocess, augment, split_idx, save_val_prds
     )
 

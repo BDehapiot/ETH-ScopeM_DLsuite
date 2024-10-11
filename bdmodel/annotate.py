@@ -39,12 +39,12 @@ train_path = Path(Path.cwd().parent, "data", "train_nuclei")
 # Parameters
 edit = True
 randomize = True
-np.random.seed(42)
+# np.random.seed(42)
 brush_size = 10
 
-#%% Class : Painter() ---------------------------------------------------------
+#%% Class : Annotate() --------------------------------------------------------
 
-class Painter:
+class Annotate:
     
     def __init__(self, train_path, edit=True, randomize=True):
         self.train_path = train_path
@@ -458,5 +458,4 @@ class Painter:
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    painter = Painter(train_path, edit=edit, randomize=randomize)
-    msks = painter.msks
+    annotate = Annotate(train_path, edit=edit, randomize=randomize)

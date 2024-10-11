@@ -1,8 +1,6 @@
 #%% Imports -------------------------------------------------------------------
 
-import pytest
 import numpy as np
-from pathlib import Path
 
 # bdtools
 from bdtools.norm import norm_pct
@@ -10,26 +8,9 @@ from bdtools.norm import norm_pct
 # Skimage
 from skimage.morphology import disk, ball
 
-#%% Comments ------------------------------------------------------------------
-
-'''
-General cases:
-    
-    1) raw image + binary mask
-    2) raw image + labeled mask (semantic)
-    3) raw image + labeled mask (instance)
-    
-To test:
-    - Input images :
-        - "uint8", "uint16", "float32" (negative values)
-        - various shape & dimensions (2D, 3D)
-        
-    
-'''
-
 #%% Function(s) ---------------------------------------------------------------
 
-def generate_random_data(
+def random_data(
         nData,
         nZ, nY, nX, 
         nObj, min_radius, max_radius,
@@ -38,7 +19,7 @@ def generate_random_data(
        
     # Nested function(s) ------------------------------------------------------
     
-    def _generate_random_data(
+    def _random_data(
             nZ, nY, nX, 
             nObj, min_radius, max_radius,
             img_noise, img_dtype, msk_dtype
@@ -122,7 +103,7 @@ def generate_random_data(
     
     msks, imgs = [], []
     for n in range(nData):
-        img, msk = _generate_random_data(
+        img, msk = _random_data(
             nZ, nY, nX, 
             nObj, min_radius, max_radius,
             img_noise, img_dtype, msk_dtype
@@ -134,45 +115,21 @@ def generate_random_data(
 
 #%% Test cases ----------------------------------------------------------------
 
-params = []
-for i in range(10):
+params = [
     
-    # generate_random_data() parameters
-    nData = np.random.randint(5, 20)
-    nZ = np.random.choice([1, np.random.randint(2, 32)])
-    nY = np.random.randint(64, 512)
-    nX = np.random.randint(64, 512)
-    nObj = np.random.randint(0, 16)
-    min_radius = np.random.randint(8, 16)
-    max_radius = round(min_radius * np.random.uniform(1.1, 3))
-    img_noise = round(np.random.uniform(0.1, 1.0), 3)
-    img_dtype = str(np.random.choice(["uint8", "uint16", "float32"]))
-    msk_dtype = str(np.random.choice(["uint8", "uint16", "float32", "bool"]))
+    # 
+    {
+     "nData" : 16,
+     "nZ" : 1, "nY" : 512, "nX" : 512,
+     "nObj" : 16, "min_radius" : 16, "max_radius" : 32,
+     "img_noise" : 0.5, "img_dtype" : "uint8", "msk_dtype" : "bool",
+    },
     
-    # model_train() parameters
-    
-    
-    params.append((
-        nData,
-        nZ, nY, nX,
-        nObj, min_radius, max_radius,
-        img_noise, img_dtype, msk_dtype,
-        )) 
-
-#%% Tests ---------------------------------------------------------------------
-
-@pytest.mark.parametrize(
-    "nData, "
-    "nZ, nY, nX, "
-    "nObj, min_radius, max_radius, "
-    "img_noise, img_dtype, msk_dtype",
-    params
-    )
-
-def test_model_train():
-    pass
+    ]
 
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    pass
+    
+    for i in range(10):
+        msks, imgs = 
