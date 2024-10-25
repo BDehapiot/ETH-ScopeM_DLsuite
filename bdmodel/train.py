@@ -27,6 +27,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 '''
 Current:
+- Accept different size input imgs/msks before making patches  
 '''
 
 '''
@@ -377,7 +378,7 @@ class CustomCallback(Callback):
 if __name__ == "__main__":
 
     # Paths
-    train_path = Path(Path.cwd().parent, "data", "train_calcium")
+    train_path = Path(Path.cwd().parent, "data", "train_tissue")
 
     # Train
     train = Train(
