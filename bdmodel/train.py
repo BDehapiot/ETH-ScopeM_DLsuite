@@ -27,6 +27,11 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 '''
 Current:
+- 
+'''
+
+'''
+To test:
 - Accept different size input imgs/msks before making patches  
 '''
 
@@ -34,6 +39,7 @@ Current:
 To Do:
 - Add GPU limitations
 - Check verbosity and log message
+    - Use preexsting weights message etc...
 - Multi-labels semantic segmentation (multi-class training)
 - Multi-channel segmentation (RGB...)
 '''
@@ -383,19 +389,22 @@ if __name__ == "__main__":
     # Train
     train = Train(
         train_path,
-        name = "normal",
+        name="normal_256",
         msk_suffix="",
-        msk_type="normal",
+        msk_type="bounds",
         img_norm="global",
-        patch_size=128,
+        patch_size=256,
         patch_overlap=32,
         nAugment=500,
         backbone="resnet18",
         epochs=200,
-        batch_size=32,
+        batch_size=4,
         validation_split=0.2,
         learning_rate=0.0005,
-        patience=20,
+        patience=30,
         weights_path="",
-        # weights_path=Path(Path.cwd(), "model_cells", "weights.h5"),
+        # weights_path=Path(Path.cwd(), "model_normal", "weights.h5"),
         )
+    
+    imgs = train.imgs
+    msks = train.msks

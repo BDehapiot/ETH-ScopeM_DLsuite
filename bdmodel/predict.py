@@ -73,9 +73,10 @@ def predict(
 if __name__ == "__main__":
     
     # Paths
-    model_path = Path.cwd() / "model_normal"
+    model_path = Path.cwd() / "model_normal_1024"
     # imgs_path = Path.cwd().parent / "data" / "Exp1_rf-0.1_rstack_1000-1199.tif"
-    imgs_path = Path.cwd().parent / "data" / "Exp2_rf-0.1_rstack_1000-1199.tif"
+    # imgs_path = Path.cwd().parent / "data" / "Exp2_rf-0.1_rstack_1000-1199.tif"
+    imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-18_4 merged_pix(13.771)_00.tif"
     
     # Open data
     imgs = io.imread(imgs_path)
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     prds = predict(        
         imgs,
         model_path,
-        img_norm="global",
+        img_norm="none",
         patch_overlap=0,
         )
     t1 = time.time()

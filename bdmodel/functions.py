@@ -31,8 +31,8 @@ def open_data(train_path, msk_suffix):
             img_name = path.name.replace(tag, "")
             imgs.append(io.imread(path.parent / img_name))
             msks.append(io.imread(path))
-    imgs = np.stack(imgs)
-    msks = np.stack(msks)
+    # imgs = np.stack(imgs)
+    # msks = np.stack(msks)
     return imgs, msks
 
 def split_idx(n, validation_split=0.2):
@@ -153,7 +153,7 @@ def preprocess(
     # Nested function(s) ------------------------------------------------------
 
     def normalize(arr, pct_low=0.01, pct_high=99.99):
-        return norm_gcn(norm_pct(arr, pct_low=pct_low, pct_high=pct_high))
+        return norm_pct(norm_gcn(arr), pct_low=pct_low, pct_high=pct_high)
     
     def _preprocess(img, msk=None):
                 
@@ -169,30 +169,51 @@ def preprocess(
                 msk = find_boundaries(msk)           
 
             if patch_size > 0:
+                img = extract_patches(img, patch_size, patch_overlap)
                 msk = extract_patches(msk, patch_size, patch_overlap)
+                
+                return img, msk
+                
+        else:
         
-        if patch_size > 0:
-            img = extract_patches(img, patch_size, patch_overlap)
+            if patch_size > 0:
+                img = extract_patches(img, patch_size, patch_overlap)
 
-        return img, msk
+            return img
         
     # Execute -----------------------------------------------------------------
 
+    if isinstance(imgs, list):
+        nI = len(imgs)
+    elif isinstance(imgs, np.ndarray):
+        if imgs.ndim == 2: 
+            nI = 1
+        elif imgs.ndim == 3:
+            nI = imgs.shape[0]
+        
     if img_norm == "global":
         imgs = normalize(imgs)
     
     if msks is not None:
-        
-        outputs = Parallel(n_jobs=-1)(
-            delayed(_preprocess)(img, msk)
-            for img, msk in zip(imgs, msks)
-            )
-        imgs = np.stack([data[0] for data in outputs])
-        msks = np.stack([data[1] for data in outputs])
-        
-        if patch_size > 0:
-            imgs = np.stack([arr for sublist in imgs for arr in sublist])
-            msks = np.stack([arr for sublist in msks for arr in sublist])
+                
+        if nI > 1:
+            
+            outputs = Parallel(n_jobs=-1)(
+                delayed(_preprocess)(img, msk)
+                for img, msk in zip(imgs, msks)
+                )
+            imgs = [data[0] for data in outputs]
+            msks = [data[1] for data in outputs]
+            
+            if patch_size > 0:
+                imgs = np.stack([arr for sublist in imgs for arr in sublist])
+                msks = np.stack([arr for sublist in msks for arr in sublist])
+                
+        else:
+            
+            imgs, msks = _preprocess(imgs, msks)
+            imgs = np.stack(imgs)
+            msks = np.stack(msks)
         
         imgs = imgs.astype("float32")
         msks = msks.astype("float32")
@@ -201,14 +222,21 @@ def preprocess(
     
     else:
         
-        outputs = Parallel(n_jobs=-1)(
-            delayed(_preprocess)(img)
-            for img in imgs
-            )
-        imgs = np.stack([data[0] for data in outputs])
-        
-        if patch_size > 0:
-            imgs = np.stack([arr for sublist in imgs for arr in sublist])
+        if nI > 1:
+               
+            outputs = Parallel(n_jobs=-1)(
+                delayed(_preprocess)(img)
+                for img in imgs
+                )
+            imgs = [data[0] for data in outputs]
+            
+            if patch_size > 0:
+                imgs = np.stack([arr for sublist in imgs for arr in sublist])
+                
+        else:
+            
+            imgs = _preprocess(imgs)
+            imgs = np.stack(imgs)
         
         imgs = imgs.astype("float32")
         
@@ -300,3 +328,17 @@ def predict(
     prds = merge_patches(prds, imgs.shape, patch_overlap)
     
     return prds
+
+#%% Execute -------------------------------------------------------------------
+
+if __name__ == "__main__":
+    
+    # Paths
+    model_path = Path.cwd() / "model_normal"
+    imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-13_4 merged_pix(13.771)_00.tif"
+    
+    #
+    imgs = io.imread(imgs_path)
+    
+    # 
+    imgs = preprocess(imgs, patch_size=512)
