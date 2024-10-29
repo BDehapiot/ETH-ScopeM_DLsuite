@@ -91,7 +91,7 @@ def preprocess(
         imgs, msks=None,
         img_norm="global",
         msk_type="normal", 
-        patch_size=0, 
+        patch_size=256, 
         patch_overlap=0,
         ):
     
@@ -99,19 +99,18 @@ def preprocess(
     Preprocess images and masks for training or prediction procedures.
     
     If msks=None, only images will be preprocessed.
-    If patch_size != 0, images and masks will be splitted into patches.
+    Images and masks will be splitted into patches.
     
     Parameters
     ----------
-    imgs : 3D ndarray (int or float)
-        Inputs images, stacked along the first dimension. 
+    imgs : 2D ndarray or list of 2D ndarrays (int or float)
+        Inputs image(s).
         
-    msks : 3D ndarray (bool or int), optional, default=None 
-        Inputs masks, stacked along the first dimension. 
+    msks : 2D ndarray or list of 2D ndarrays (bool or int), optional, default=None 
+        Inputs mask(s).
         If None, only images will be preprocessed.
         
     img_norm : str, default="global"
-        - "none"   : No changes.
         - "global" : 0 to 1 normalization considering the full stack.
         - "image"  : 0 to 1 normalization per image.
         
@@ -120,11 +119,13 @@ def preprocess(
         - "edt"    : Euclidean distance transform of binary/labeled objects.
         - "bounds" : Boundaries of binary/labeled objects.
 
-    patch_size : int, default=0
-        If != 0, size of extracted patches.
+    patch_size : int, default=256
+        Size of extracted patches.
+        Should be int > 0 and multiple of 2.
     
     patch_overlap : int, default=0
-        Overlap between patches (Must be between 0 and size - 1).
+        Overlap between patches.
+        Should be int, from 0 to patch_size - 1.
         
     Returns
     -------  
@@ -143,95 +144,76 @@ def preprocess(
             f" Expected one of {valid_types}."
             )
 
-    valid_norms = ["none", "global", "image"]
+    valid_norms = ["global", "image"]
     if img_norm not in valid_norms:
         raise ValueError(
             f"Invalid value for img_norm: '{img_norm}'."
             f" Expected one of {valid_norms}."
             )
-    
+        
+    if patch_size <= 0 or patch_size % 2 != 0:
+        raise ValueError(
+            f"Invalid value for patch_size: '{patch_size}'."
+            f" Should be int > 0 and multiple of 2."
+            )
+
+    if patch_overlap < 0 or patch_overlap >= patch_size:
+        raise ValueError(
+            f"Invalid value for patch_overlap: '{patch_overlap}'."
+            f" Should be int, from 0 to patch_size - 1."
+            )
+
     # Nested function(s) ------------------------------------------------------
 
     def normalize(arr, pct_low=0.01, pct_high=99.99):
-        return norm_pct(norm_gcn(arr), pct_low=pct_low, pct_high=pct_high)
-    
+        return norm_pct(norm_gcn(arr), pct_low=pct_low, pct_high=pct_high)      
+            
     def _preprocess(img, msk=None):
-                
-        if img_norm == "image":
-            img = normalize(img)
-        
-        if msk is not None:
+
+        if msks is None:
+            
+            img = np.array(img)
+            
+            img = extract_patches(img, patch_size, patch_overlap)
+                 
+            return img
+            
+        else:
+            
+            img = np.array(img)
+            msk = np.array(msk)
+            
             if msk_type == "normal":
                 msk = msk > 0
             elif msk_type == "edt":
                 msk = get_edt(msk, normalize="object", parallel=False)
             elif msk_type == "bounds":
                 msk = find_boundaries(msk)           
-
-            if patch_size > 0:
-                img = extract_patches(img, patch_size, patch_overlap)
-                msk = extract_patches(msk, patch_size, patch_overlap)
+            
+            img = extract_patches(img, patch_size, patch_overlap)
+            msk = extract_patches(msk, patch_size, patch_overlap)
                 
-                return img, msk
-                
-        else:
-        
-            if patch_size > 0:
-                img = extract_patches(img, patch_size, patch_overlap)
-
-            return img
-        
-    # Execute -----------------------------------------------------------------
-
-    if isinstance(imgs, list):
-        nI = len(imgs)
-    elif isinstance(imgs, np.ndarray):
-        if imgs.ndim == 2: 
-            nI = 1
-        elif imgs.ndim == 3:
-            nI = imgs.shape[0]
-        
+            return img, msk
+    
+    # Execute -----------------------------------------------------------------        
+   
+    # Normalize images
     if img_norm == "global":
         imgs = normalize(imgs)
-    
-    if msks is not None:
-                
-        if nI > 1:
-            
-            outputs = Parallel(n_jobs=-1)(
-                delayed(_preprocess)(img, msk)
-                for img, msk in zip(imgs, msks)
-                )
-            imgs = [data[0] for data in outputs]
-            msks = [data[1] for data in outputs]
-            
-            if patch_size > 0:
-                imgs = np.stack([arr for sublist in imgs for arr in sublist])
-                msks = np.stack([arr for sublist in msks for arr in sublist])
-                
-        else:
-            
-            imgs, msks = _preprocess(imgs, msks)
-            imgs = np.stack(imgs)
-            msks = np.stack(msks)
+    if img_norm == "image":
+        imgs = [normalize(img) for img in imgs]
+   
+    # Preprocess
+    if msks is None:
         
-        imgs = imgs.astype("float32")
-        msks = msks.astype("float32")
-        
-        return imgs, msks
-    
-    else:
-        
-        if nI > 1:
+        if len(imgs) > 1:
                
             outputs = Parallel(n_jobs=-1)(
                 delayed(_preprocess)(img)
                 for img in imgs
                 )
             imgs = [data[0] for data in outputs]
-            
-            if patch_size > 0:
-                imgs = np.stack([arr for sublist in imgs for arr in sublist])
+            imgs = np.stack([arr for sublist in imgs for arr in sublist])
                 
         else:
             
@@ -241,6 +223,30 @@ def preprocess(
         imgs = imgs.astype("float32")
         
         return imgs
+    
+    else:
+        
+        if len(imgs) > 1:
+            
+            outputs = Parallel(n_jobs=-1)(
+                delayed(_preprocess)(img, msk)
+                for img, msk in zip(imgs, msks)
+                )
+            imgs = [data[0] for data in outputs]
+            msks = [data[1] for data in outputs]
+            imgs = np.stack([arr for sublist in imgs for arr in sublist])
+            msks = np.stack([arr for sublist in msks for arr in sublist])
+            
+        else:
+            
+            imgs, msks = _preprocess(imgs, msks)
+            imgs = np.stack(imgs)
+            msks = np.stack(msks)
+            
+        imgs = imgs.astype("float32")
+        msks = msks.astype("float32")
+        
+        return imgs, msks
     
 #%% Function: augment() -------------------------------------------------------
 
