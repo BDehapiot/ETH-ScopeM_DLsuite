@@ -1,5 +1,5 @@
 name: model_normal_256
-date: 2024-10-28_16h37m06s
+date: 2024-10-30_09h37m10s
 path: c:\users\bdeha\projects\eth-scopem_dlsuite\data\train_tissue
 msk_suffix: 
 msk_type: bounds
@@ -14,5 +14,5 @@ batch_size: 4
 validation_split: 0.2000
 learning_rate: 0.0005
 patience: 30
-best_epoch: 34
-best_val_loss: 0.0178
+best_epoch: 41
+best_val_loss: 0.0235

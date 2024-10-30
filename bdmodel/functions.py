@@ -194,7 +194,7 @@ def preprocess(
             return img, msk
     
     # Execute -----------------------------------------------------------------        
-   
+       
     # Normalize images
     if img_norm == "global":
         imgs = normalize(imgs)
@@ -203,6 +203,9 @@ def preprocess(
    
     # Preprocess
     if msks is None:
+        
+        if isinstance(imgs, np.ndarray):
+            imgs = [imgs]
         
         if len(imgs) > 1:
                
@@ -223,6 +226,11 @@ def preprocess(
         return imgs
     
     else:
+        
+        if isinstance(imgs, np.ndarray):
+            imgs = [imgs]
+        if isinstance(imgs, np.ndarray):
+            imgs = [imgs]
         
         if len(imgs) > 1:
             
@@ -291,8 +299,10 @@ def predict(
         img_norm="global",
         patch_overlap=0,
         ):
+    
+    global prds
 
-    valid_norms = ["none", "global", "image"]
+    valid_norms = ["global", "image"]
     if img_norm not in valid_norms:
         raise ValueError(
             f"Invalid value for img_norm: '{img_norm}'."
