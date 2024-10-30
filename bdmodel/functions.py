@@ -334,17 +334,3 @@ def predict(
     prds = merge_patches(prds, imgs.shape, patch_overlap)
     
     return prds
-
-#%% Execute -------------------------------------------------------------------
-
-if __name__ == "__main__":
-    
-    # Paths
-    model_path = Path.cwd() / "model_normal"
-    imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-13_4 merged_pix(13.771)_00.tif"
-    
-    #
-    imgs = io.imread(imgs_path)
-    
-    # 
-    imgs = preprocess(imgs, patch_size=512)

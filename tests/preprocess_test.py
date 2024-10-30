@@ -1,10 +1,8 @@
 #%% Imports -------------------------------------------------------------------
 
 import sys
-import shutil
 import pytest
 import numpy as np
-from skimage import io
 from pathlib import Path
 
 # model_function
@@ -14,7 +12,7 @@ from bdmodel.functions import preprocess
 from bdtools.norm import norm_pct
 
 # Skimage
-from skimage.morphology import disk, ball
+from skimage.morphology import disk
 
 ROOT_PATH = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT_PATH / 'tests' / 'data' / 'patch'
@@ -113,42 +111,7 @@ for i in range(50):
         addMsk, msk_type, img_norm,
         patch_size, patch_overlap,
         )) 
-    
-#%% Tests ---------------------------------------------------------------------
-
-# imgs, msks = [], []
-# for d in range(nData):
-#     img, msk = random_data(
-#         nY[d], nX[d], 
-#         nObj[d], min_radius[d], max_radius[d],
-#         img_noise, img_dtype, msk_dtype
-#         )
-#     imgs.append(img)
-#     msks.append(msk)
-
-# if addMsk:
-#     imgs, msks = preprocess(
-#         imgs, msks=msks,
-#         img_norm=img_norm,
-#         msk_type=msk_type, 
-#         patch_size=patch_size, 
-#         patch_overlap=patch_overlap,
-#         )
-#     print(np.min(imgs))
-#     print(np.min(msks))
-#     print(np.max(imgs))
-#     print(np.max(msks))
-# else:
-#     imgs = preprocess(
-#         imgs, msks=None,
-#         img_norm=img_norm,
-#         msk_type=msk_type, 
-#         patch_size=patch_size, 
-#         patch_overlap=patch_overlap,
-#         ) 
-#     print(np.min(imgs))
-#     print(np.max(imgs))
-    
+       
 #%% Tests ---------------------------------------------------------------------
 
 @pytest.mark.parametrize(
