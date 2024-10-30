@@ -23,27 +23,6 @@ from tensorflow.keras.callbacks import (
 # Matplotlib
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-#%% Comments ------------------------------------------------------------------
-
-'''
-Current:
-- 
-'''
-
-'''
-To test:
-- Accept different size input imgs/msks before making patches  
-'''
-
-'''
-To Do:
-- Add GPU limitations
-- Check verbosity and log message
-    - Use preexsting weights message etc...
-- Multi-labels semantic segmentation (multi-class training)
-- Multi-channel segmentation (RGB...)
-'''
-
 #%% Class: Train() ------------------------------------------------------------
 
 class Train:
@@ -389,13 +368,13 @@ if __name__ == "__main__":
     # Train
     train = Train(
         train_path,
-        name="normal_256",
-        msk_suffix="",
-        msk_type="bounds",
+        name="surface_768",
+        msk_suffix="-surface",
+        msk_type="normal",
         img_norm="global",
-        patch_size=256,
+        patch_size=768,
         patch_overlap=32,
-        nAugment=500,
+        nAugment=100,
         backbone="resnet18",
         epochs=200,
         batch_size=4,
@@ -403,7 +382,7 @@ if __name__ == "__main__":
         learning_rate=0.0005,
         patience=30,
         weights_path="",
-        # weights_path=Path(Path.cwd(), "model_normal", "weights.h5"),
+        # weights_path=Path(Path.cwd(), "model_normal_768", "weights.h5"),
         )
     
     imgs = train.imgs

@@ -12,10 +12,9 @@ from bdmodel.functions import predict
 if __name__ == "__main__":
     
     # Paths
-    model_path = Path.cwd() / "model_normal_768"
-    # imgs_path = Path.cwd().parent / "data" / "Exp1_rf-0.1_rstack_1000-1199.tif"
-    # imgs_path = Path.cwd().parent / "data" / "Exp2_rf-0.1_rstack_1000-1199.tif"
-    imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-13_4 merged_pix(13.771)_00.tif"
+    # model_path = Path.cwd() / "model_mass_768"
+    model_path = Path.cwd() / "model_surface_768"
+    imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-18_4 merged_pix(13.771)_00.tif"
     
     # Open data
     imgs = io.imread(imgs_path)
