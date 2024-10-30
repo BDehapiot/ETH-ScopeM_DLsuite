@@ -31,8 +31,6 @@ def open_data(train_path, msk_suffix):
             img_name = path.name.replace(tag, "")
             imgs.append(io.imread(path.parent / img_name))
             msks.append(io.imread(path))
-    # imgs = np.stack(imgs)
-    # msks = np.stack(msks)
     return imgs, msks
 
 def split_idx(n, validation_split=0.2):
