@@ -23,6 +23,13 @@ from tensorflow.keras.callbacks import (
 # Matplotlib
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
+#%% Comments ------------------------------------------------------------------
+
+'''
+The open function should either be updated or ideally dissociated from the 
+Train, i a way that Train directly takes imgs and msks as input.
+'''
+
 #%% Class: Train() ------------------------------------------------------------
 
 class Train:
