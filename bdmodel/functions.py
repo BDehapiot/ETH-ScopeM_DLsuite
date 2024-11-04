@@ -157,8 +157,10 @@ def preprocess(
 
     # Nested function(s) ------------------------------------------------------
 
-    def normalize(arr, pct_low=0.01, pct_high=99.99):
-        return norm_pct(norm_gcn(arr), pct_low=pct_low, pct_high=pct_high)      
+    def normalize(arr, sample_fraction=0.1):
+        arr = norm_gcn(arr, sample_fraction=sample_fraction)
+        arr = norm_pct(arr, sample_fraction=sample_fraction)
+        return arr      
             
     def _preprocess(img, msk=None):
 
