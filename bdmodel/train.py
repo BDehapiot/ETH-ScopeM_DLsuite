@@ -24,6 +24,12 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 #%% Comments ------------------------------------------------------------------
 
+'''
+To do:
+High priority:
+- Add a method to stop training while still saving all the necessary files!
+'''
+
 #%% Function(s) ---------------------------------------------------------------
 
 def split_idx(n, validation_split=0.2):
