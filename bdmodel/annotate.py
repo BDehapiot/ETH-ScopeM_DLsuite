@@ -23,10 +23,6 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 #%% Comments ------------------------------------------------------------------
 
 '''
-Bug
-- if mask_suffix, the suffix add every time it saves
-
-
 Todo
 - Manage output format for mask (uint8 or uint16)
 - Something wrong with font size in Napari (probably due to last pyqt version)
@@ -82,12 +78,7 @@ class Annotate:
             
     def update_msk_suffix(self):
         self.msk_suffix = self.line_msk_suffix.text() 
-        
-    # def update_msk_paths(self):
-    #     for i, msk_path in enumerate(self.msk_paths):
-    #         self.msk_paths[i] = Path(str(msk_path).replace(
-    #             ".tif", f"{self.msk_suffix}.tif"))
-            
+
     def update_msk_paths(self):
         for i, img_path in enumerate(self.img_paths):
             self.msk_paths[i] = Path(str(img_path).replace(

@@ -1,5 +1,5 @@
 from .functions import (
-    open_data, split_idx, save_val_prds, preprocess, augment
+    get_paths, preprocess, augment
     )
 from .annotate import Annotate
 from .train import Train
