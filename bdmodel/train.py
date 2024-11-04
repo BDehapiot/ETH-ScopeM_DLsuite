@@ -234,7 +234,6 @@ class Train:
             "date"             : self.date,
             "save_name"        : self.save_name,
             "save_path"        : self.save_path,
-            "msk_suffix"       : self.msk_suffix,
             "msk_type"         : self.msk_type,
             "img_norm"         : self.img_norm,
             "patch_size"       : self.patch_size,
