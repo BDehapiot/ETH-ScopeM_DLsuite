@@ -96,10 +96,10 @@ def preprocess(
     Parameters
     ----------
     imgs : 2D ndarray or list of 2D ndarrays (int or float)
-        Inputs image(s).
+        Input image(s).
         
     msks : 2D ndarray or list of 2D ndarrays (bool or int), optional, default=None 
-        Inputs mask(s).
+        Input corresponding mask(s).
         If None, only images will be preprocessed.
         
     img_norm : str, default="global"
@@ -196,12 +196,13 @@ def preprocess(
         imgs = normalize(imgs)
     if img_norm == "image":
         imgs = [normalize(img) for img in imgs]
-   
+    
     # Preprocess
     if msks is None:
         
-        if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
+        if isinstance(imgs, np.ndarray):           
+            if imgs.ndim == 2: imgs = [imgs]
+            elif imgs.ndim == 3: imgs = list(imgs)
         
         if len(imgs) > 1:
                
@@ -209,7 +210,7 @@ def preprocess(
                 delayed(_preprocess)(img)
                 for img in imgs
                 )
-            imgs = [data[0] for data in outputs]
+            imgs = [data for data in outputs]
             imgs = np.stack([arr for sublist in imgs for arr in sublist])
                 
         else:
@@ -224,9 +225,11 @@ def preprocess(
     else:
         
         if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
-        if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
+            if imgs.ndim == 2: imgs = [imgs]
+            elif imgs.ndim == 3: imgs = list(imgs)
+        if isinstance(msks, np.ndarray):
+            if msks.ndim == 2: msks = [msks]
+            elif msks.ndim == 3: msks = list(msks)
         
         if len(imgs) > 1:
             
@@ -253,7 +256,44 @@ def preprocess(
 #%% Function: augment() -------------------------------------------------------
 
 def augment(imgs, msks, iterations):
+      
+    """
+    Augment images and masks using random transformations.
+    
+    The following transformation are applied:
         
+        - vertical flip (p = 0.5)      
+        - horizontal flip (p = 0.5)
+        - rotate 90° (p = 0.5)
+        - transpose (p = 0.5)
+        - distord (p = 0.5)
+    
+    The same transformation is applied to an image and its correponding mask.
+    Transformation can be tuned by modifying the `operations` variable.
+    The function is based on the `albumentations` library.
+    https://albumentations.ai/
+
+    Parameters
+    ----------
+    imgs : 3D ndarray (float)
+        Input image(s).
+        
+    msks : 3D ndarray (float) 
+        Input corresponding mask(s).
+        
+    iterations : int
+        The number of augmented samples to generate.
+    
+    Returns
+    -------
+    imgs : 3D ndarray (float)
+        Augmented image(s).
+        
+    msks : 3D ndarray (float) 
+        Augmented corresponding mask(s).
+    
+    """
+    
     if iterations <= imgs.shape[0]:
         warnings.warn(f"iterations ({iterations}) is less than n of images")
         

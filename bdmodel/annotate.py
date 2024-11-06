@@ -24,8 +24,8 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 
 '''
 Todo
+- What about this edit parameter, is it really necessary?
 - Manage output format for mask (uint8 or uint16)
-- Something wrong with font size in Napari (probably due to last pyqt version)
 - Reset view on first image?
 - RGB image support
 - Parameter handling (default, autosaved etc)
@@ -67,7 +67,7 @@ class Annotate:
     def init_paths(self):
         self.img_paths, self.msk_paths = [], []
         for img_path in self.train_path.iterdir():
-            if "mask" not in img_path.name:
+            if img_path.is_file() and "mask" not in img_path.name:
                 self.img_paths.append(img_path)
                 self.msk_paths.append(
                     Path(str(img_path).replace(".tif", "_mask.tif")))
@@ -130,7 +130,7 @@ class Annotate:
         seg_group_layout = QHBoxLayout()
         self.rad_semantic = QRadioButton("Semantic")
         self.rad_instance = QRadioButton("Instance")
-        self.rad_instance.setChecked(True)
+        self.rad_semantic.setChecked(True)
         seg_group_layout.addWidget(self.rad_semantic)
         seg_group_layout.addWidget(self.rad_instance)
         self.seg_group_box.setLayout(seg_group_layout)

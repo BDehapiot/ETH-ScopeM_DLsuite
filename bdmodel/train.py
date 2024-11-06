@@ -5,9 +5,7 @@ import shutil
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from matplotlib import cm
 from datetime import datetime
-import matplotlib.pyplot as plt
 import segmentation_models as sm
 
 # Functions
@@ -20,16 +18,12 @@ from tensorflow.keras.callbacks import (
     )
 
 # Matplotlib
+from matplotlib import cm
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 #%% Comments ------------------------------------------------------------------
-
-'''
-To do:
-High priority:
-- Add a method to stop training while still saving all the necessary files!
-'''
-
 #%% Function(s) ---------------------------------------------------------------
 
 def split_idx(n, validation_split=0.2):
@@ -295,6 +289,14 @@ class CustomCallback(Callback):
         plt.rcParams["font.size"] = 12
         plt.ion()
 
+        # Add stop button
+        self.stop_training = False
+        axbutton = plt.axes([0.80, 0.075, 0.1, 0.075])
+        self.stop_button = Button(axbutton, 'Stop')
+        def stop_training(event):
+            self.stop_training = True
+        self.stop_button.on_clicked(stop_training)
+
     def on_epoch_end(self, epoch, logs=None):
         
         # Get loss and mse values
@@ -411,8 +413,14 @@ class CustomCallback(Callback):
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        plt.pause(0.1)  
-    
+        plt.pause(0.1) 
+
+        # Exit ----------------------------------------------------------------
+
+        if self.stop_training:
+            self.model.stop_training = True
+            print("Training stopped")
+
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
