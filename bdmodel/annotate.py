@@ -24,11 +24,10 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 
 '''
 Todo
-- What about this edit parameter, is it really necessary?
-- Manage output format for mask (uint8 or uint16)
-- Reset view on first image?
 - RGB image support
+- Reset view on first image
 - Parameter handling (default, autosaved etc)
+- Manage output format for mask (uint8 or uint16)
 '''
 
 #%% Inputs --------------------------------------------------------------------
@@ -37,18 +36,15 @@ Todo
 train_path = Path(Path.cwd().parent, "data", "train_tissue")
 
 # Parameters
-edit = True
 randomize = True
 # np.random.seed(42)
-brush_size = 20
 
 #%% Class : Annotate() --------------------------------------------------------
 
 class Annotate:
     
-    def __init__(self, train_path, edit=True, randomize=True):
+    def __init__(self, train_path, randomize=True):
         self.train_path = train_path
-        self.edit = edit
         self.randomize = randomize
         self.idx = 0
         self.init_paths()
@@ -88,9 +84,9 @@ class Annotate:
         self.imgs, self.msks = [], []
         for img_path, msk_path in zip(self.img_paths, self.msk_paths):
             img = io.imread(img_path)
-            if msk_path.exists() and self.edit:   
+            if msk_path.exists():   
                 msk = io.imread(msk_path)
-            elif not msk_path.exists():
+            else:
                 msk = np.zeros_like(img, dtype="uint8")
             self.imgs.append(img)
             self.msks.append(msk)
@@ -101,7 +97,7 @@ class Annotate:
         self.viewer = napari.Viewer()
         self.viewer.add_image(self.imgs[0], name="image")
         self.viewer.add_labels(self.msks[0], name="mask")
-        self.viewer.layers["mask"].brush_size = brush_size
+        self.viewer.layers["mask"].brush_size = 20
         self.viewer.layers["mask"].mode = 'paint'
         
         # Contrast limits
@@ -393,9 +389,9 @@ class Annotate:
         img_path = self.img_paths[self.idx]
         msk_path = self.msk_paths[self.idx]
         img_name = img_path.name    
-        if msk_path.exists() and edit:
+        if msk_path.exists():
             msk_name = msk_path.name 
-        elif not msk_path.exists():
+        else :
             msk_name = "None"
         img_name = shorten_filename(img_name, max_length=32)
         msk_name = shorten_filename(msk_name, max_length=32)
@@ -458,4 +454,4 @@ class Annotate:
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    annotate = Annotate(train_path, edit=edit, randomize=randomize)
+    annotate = Annotate(train_path, randomize=randomize)
