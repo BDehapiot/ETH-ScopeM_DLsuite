@@ -30,15 +30,6 @@ Todo
 - Manage output format for mask (uint8 or uint16)
 '''
 
-#%% Inputs --------------------------------------------------------------------
-
-# Paths
-train_path = Path(Path.cwd().parent, "data", "train_tissue")
-
-# Parameters
-randomize = True
-# np.random.seed(42)
-
 #%% Class : Annotate() --------------------------------------------------------
 
 class Annotate:
@@ -450,8 +441,3 @@ class Annotate:
             f"<span{style2}>- Pick Label      {spacer * 5}:</span>"
             f"<span{style4}> Shift+Mouse[Left]</span><br>"
             )
-        
-#%% Execute -------------------------------------------------------------------
-
-if __name__ == "__main__":
-    annotate = Annotate(train_path, randomize=randomize)
