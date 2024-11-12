@@ -23,6 +23,10 @@ from skimage.segmentation import find_boundaries, expand_labels, flood_fill
 #%% Comments ------------------------------------------------------------------
 
 '''
+Priority
+- When changing mask suffix in Napari, the preexisting masks with same suffix 
+should be displayed.
+
 Todo
 - RGB image support
 - Reset view on first image
