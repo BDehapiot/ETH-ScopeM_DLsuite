@@ -54,7 +54,7 @@ def predict(
         )
 
     # Predict
-    prds = model.predict(patches).squeeze()
+    prds = model.predict(patches).squeeze(axis=-1)
     prds = merge_patches(prds, imgs.shape, patch_overlap)
     
     return prds

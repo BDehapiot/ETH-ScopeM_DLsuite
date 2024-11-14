@@ -167,7 +167,7 @@ def preprocess(
 
         if msks is None:
             
-            img = np.array(img)
+            img = np.array(img).squeeze()
             
             img = extract_patches(img, patch_size, patch_overlap)
                  
@@ -175,8 +175,8 @@ def preprocess(
             
         else:
             
-            img = np.array(img)
-            msk = np.array(msk)
+            img = np.array(img).squeeze()
+            msk = np.array(msk).squeeze()
             
             if msk_type == "normal":
                 msk = msk > 0
@@ -196,7 +196,10 @@ def preprocess(
     if img_norm == "global":
         imgs = normalize(imgs)
     if img_norm == "image":
-        imgs = [normalize(img) for img in imgs]
+        if isinstance(imgs, np.ndarray) and imgs.ndim == 2: 
+            imgs = normalize(imgs)
+        else:
+            imgs = [normalize(img) for img in imgs]
     
     # Preprocess
     if msks is None:
