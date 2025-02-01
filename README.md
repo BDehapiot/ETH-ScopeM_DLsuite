@@ -6,6 +6,9 @@
 ![Date Badge](https://img.shields.io/badge/Created-2024--09--04-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))
 ![License Badge](https://img.shields.io/badge/Licence-GNU%20General%20Public%20License%20v3.0-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))    
 
+!! Something wrong with augmentation, same transformation applied to all image.
+Compose must be nested in the parallel function !!!
+
 # ETH-ScopeM_DLsuite  
 Deep Learning suite for image segmentation
 
